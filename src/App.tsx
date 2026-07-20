@@ -655,15 +655,25 @@ Ví dụ định dạng đầu ra chuẩn:
                   {/* Text Editor Section */}
                   <div className="flex flex-col gap-2">
                     <div className="flex justify-between items-center text-xs">
-                      <label htmlFor="dictation-textarea" className="text-slate-700 font-bold font-display">Khung soạn thảo chép chính tả:</label>
+                      <label htmlFor="dictation-textarea" className="text-slate-700 font-bold font-display">
+                        Khung soạn thảo chép chính tả <span className="text-[11px] text-blue-600 font-medium font-mono ml-1">(Nhấn Enter để nộp nhanh)</span>:
+                      </label>
                       <span className="text-slate-400 font-mono font-semibold">{userInput.length} ký tự</span>
                     </div>
 
                     <textarea
                       id="dictation-textarea"
-                      placeholder="Hãy gõ lại câu bạn nghe được tại đây (Chú ý từng từ, đuôi s/es, thì, hoặc dấu chính tả nếu có)..."
+                      placeholder="Hãy gõ lại câu bạn nghe được tại đây... (Nhấn Enter để kiểm tra đáp án, Shift + Enter để xuống dòng)"
                       value={userInput}
                       onChange={(e) => setUserInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          if (!isEvaluating && userInput.trim()) {
+                            handleCheck();
+                          }
+                        }
+                      }}
                       disabled={isEvaluating}
                       rows={5}
                       className="w-full p-5 bg-slate-50 border-2 border-dashed border-slate-200 focus:border-blue-500 focus:bg-white focus:ring-0 rounded-2xl text-slate-800 placeholder-slate-400 outline-none transition-all resize-none leading-relaxed text-base shadow-inner"
