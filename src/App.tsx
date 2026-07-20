@@ -847,6 +847,7 @@ Ví dụ định dạng đầu ra chuẩn:
                         end={sentences[currentIndex].end}
                         padding={padding}
                         playTrigger={playTrigger}
+                        currentSentenceText={sentences[currentIndex]?.sentence}
                       />
                     </div>
                   )}

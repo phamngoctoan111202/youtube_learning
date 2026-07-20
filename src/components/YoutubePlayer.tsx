@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Play, Pause, RotateCcw, Volume2, Video, EyeOff, Repeat } from "lucide-react";
+import { Play, Pause, RotateCcw, Volume2, Video, EyeOff, Repeat, Subtitles } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 declare global {
@@ -16,6 +16,7 @@ interface YoutubePlayerProps {
   padding: number; // 0, 1, or 2 seconds
   onStateChange?: (playing: boolean) => void;
   playTrigger?: number; // Counter to trigger playback programmatically
+  currentSentenceText?: string;
 }
 
 export default function YoutubePlayer({
@@ -25,6 +26,7 @@ export default function YoutubePlayer({
   padding,
   onStateChange,
   playTrigger = 0,
+  currentSentenceText = "",
 }: YoutubePlayerProps) {
   const containerId = `yt-player-${videoId}`;
   const playerRef = useRef<any>(null);
@@ -35,6 +37,7 @@ export default function YoutubePlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [volume, setVolume] = useState(80);
   const [hideVideo, setHideVideo] = useState(false); // Default to showing video
+  const [showSubtitles, setShowSubtitles] = useState(false); // Default off for dictation practice
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isLooping, setIsLooping] = useState(false);
 
@@ -88,6 +91,8 @@ export default function YoutubePlayer({
           rel: 0,
           showinfo: 0,
           iv_load_policy: 3,
+          cc_load_policy: showSubtitles ? 1 : 0,
+          cc_lang_pref: "en",
           modestbranding: 1,
           playsinline: 1,
           enablejsapi: 1,
@@ -98,6 +103,18 @@ export default function YoutubePlayer({
             setIsLoaded(true);
             event.target.setVolume(volume);
             event.target.setPlaybackRate(playbackRate);
+            if (showSubtitles) {
+              try {
+                if (typeof event.target.loadModule === "function") {
+                  event.target.loadModule("captions");
+                }
+                if (typeof event.target.setOption === "function") {
+                  event.target.setOption("captions", "track", { languageCode: "en" });
+                }
+              } catch (e) {
+                console.warn("Could not load captions onReady:", e);
+              }
+            }
           },
           onStateChange: (event: any) => {
             const state = event.data;
@@ -117,6 +134,31 @@ export default function YoutubePlayer({
       }
     };
   }, [videoId]);
+
+  // Toggle YouTube native CC module dynamically when showSubtitles state changes
+  useEffect(() => {
+    if (isLoaded && playerRef.current) {
+      try {
+        if (showSubtitles) {
+          if (typeof playerRef.current.loadModule === "function") {
+            playerRef.current.loadModule("captions");
+          }
+          if (typeof playerRef.current.setOption === "function") {
+            playerRef.current.setOption("captions", "track", { languageCode: "en" });
+          }
+        } else {
+          if (typeof playerRef.current.unloadModule === "function") {
+            playerRef.current.unloadModule("captions");
+          }
+          if (typeof playerRef.current.setOption === "function") {
+            playerRef.current.setOption("captions", "track", {});
+          }
+        }
+      } catch (err) {
+        console.warn("Error toggling YouTube captions:", err);
+      }
+    }
+  }, [showSubtitles, isLoaded]);
 
   // Monitor playback limits
   useEffect(() => {
@@ -233,6 +275,21 @@ export default function YoutubePlayer({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Subtitles / CC Toggle button */}
+          <button
+            id="toggle-subtitles-button"
+            onClick={() => setShowSubtitles(!showSubtitles)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              showSubtitles
+                ? "bg-rose-50 text-rose-600 border border-rose-200/80 hover:bg-rose-100"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200"
+            }`}
+            title={showSubtitles ? "Tắt Phụ Đề Video (CC)" : "Bật Phụ Đề Video YouTube (CC)"}
+          >
+            <Subtitles size={14} />
+            <span>{showSubtitles ? "Tắt Phụ Đề (CC)" : "Bật Phụ Đề (CC)"}</span>
+          </button>
+
           {/* Hide/Show Video toggle - critical for dictation */}
           <button
             id="toggle-video-mode-button"
@@ -259,6 +316,16 @@ export default function YoutubePlayer({
         >
           <div id={containerId} className="w-full h-full"></div>
         </div>
+
+        {/* Subtitle Banner Overlay when Subtitles are ON */}
+        {showSubtitles && currentSentenceText && !hideVideo && (
+          <div className="absolute bottom-3 left-3 right-3 z-20 pointer-events-none flex justify-center">
+            <div className="bg-slate-950/85 text-white font-bold text-xs sm:text-sm px-4 py-2 rounded-xl backdrop-blur-md border border-white/15 shadow-xl text-center max-w-lg leading-relaxed">
+              <span className="text-rose-400 font-mono text-[9px] block uppercase tracking-widest font-extrabold mb-0.5">Phụ Đề Video (CC)</span>
+              {currentSentenceText}
+            </div>
+          </div>
+        )}
 
         {/* Beautiful vinyl/audio animation when video is hidden */}
         {hideVideo && (
