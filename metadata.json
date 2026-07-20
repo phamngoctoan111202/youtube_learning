@@ -1,0 +1,6 @@
+{
+  "name": "Luyện Chép Chính Tả YouTube",
+  "description": "Ứng dụng luyện nghe và chép chính tả từ video YouTube thông minh, phân đoạn câu tự động bằng AI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
