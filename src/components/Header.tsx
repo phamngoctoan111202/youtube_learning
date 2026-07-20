@@ -2,8 +2,8 @@ import { Headphones, Sparkles, Youtube } from "lucide-react";
 
 export default function Header() {
   return (
-    <header className="py-5 px-4 md:px-8 border-b-2 border-slate-200/80 bg-white/90 backdrop-blur-md sticky top-0 z-50 shadow-sm">
-      <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+    <header className="py-3 px-3 md:px-6 border-b-2 border-slate-200/80 bg-white/90 backdrop-blur-md sticky top-0 z-50 shadow-sm">
+      <div className="max-w-[1700px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
         {/* Brand Logo */}
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-500 to-red-600 flex items-center justify-center shadow-md shadow-rose-500/10">

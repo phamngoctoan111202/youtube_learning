@@ -305,7 +305,7 @@ export default function App() {
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col font-sans" id="app-root-container">
       <Header />
 
-      <main className="flex-1 py-8 px-4 md:px-8 max-w-7xl w-full mx-auto flex flex-col gap-8">
+      <main className="flex-1 py-3 px-2 sm:px-4 md:px-6 max-w-[1700px] w-full mx-auto flex flex-col gap-5">
         <AnimatePresence mode="wait">
           {!videoDetails ? (
             /* ================= LOADING & LANDING CONFIG SCREEN ================= */
@@ -557,11 +557,11 @@ Ví dụ định dạng đầu ra chuẩn:
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start"
+              className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start"
               id="active-dictation-screen"
             >
-              {/* LEFT COLUMN: Dictation Workspace & Editor (7 columns) */}
-              <div className="lg:col-span-7 flex flex-col gap-6" id="dictation-workspace">
+              {/* LEFT COLUMN: Dictation Workspace & Editor (6 columns) */}
+              <div className="lg:col-span-6 flex flex-col gap-5" id="dictation-workspace">
                 
                 {/* 1. Playground & Dictation Card */}
                 <div className="bg-white border-2 border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col gap-5 relative">
@@ -737,8 +737,8 @@ Ví dụ định dạng đầu ra chuẩn:
 
               </div>
 
-              {/* RIGHT COLUMN: Video Player & Sentence Navigation (5 columns, sticky on desktop) */}
-              <div className="lg:col-span-5 flex flex-col gap-5 lg:sticky lg:top-6 h-fit" id="sidebar-panel-right">
+              {/* RIGHT COLUMN: Video Player & Sentence Navigation (6 columns, sticky on desktop) */}
+              <div className="lg:col-span-6 flex flex-col gap-5 lg:sticky lg:top-4 h-fit" id="sidebar-panel-right">
                 
                 {/* Video Header Detail & Stats Card */}
                 <div className="bg-white border-2 border-slate-200 rounded-3xl overflow-hidden shadow-sm flex flex-col" id="video-card-right">
@@ -801,7 +801,7 @@ Ví dụ định dạng đầu ra chuẩn:
 
                   {/* YouTube Player (Positioned directly on the Right side) */}
                   {videoDetails && sentences[currentIndex] && (
-                    <div className="p-2 bg-slate-900 border-b-2 border-slate-100">
+                    <div className="p-1 bg-slate-900 border-b-2 border-slate-100">
                       <YoutubePlayer
                         videoId={videoDetails.videoId}
                         start={sentences[currentIndex].start}
