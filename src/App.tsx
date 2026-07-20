@@ -22,12 +22,14 @@ import {
   FileText,
   Code,
   AlertTriangle,
-  Trash2
+  Trash2,
+  BookmarkPlus
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import Header from "./components/Header";
 import YoutubePlayer from "./components/YoutubePlayer";
 import FeedbackCard from "./components/FeedbackCard";
+import AddVocabularyModal from "./components/AddVocabularyModal";
 import { RECOMMENDED_VIDEOS } from "./data";
 import { Sentence, VideoDetails, EvaluationResult } from "./types";
 
@@ -61,6 +63,17 @@ export default function App() {
   // Progress/History tracking (saved to localStorage)
   const [progress, setProgress] = useState<Record<number, number>>({}); // sentence id -> max accuracy scored
   const [history, setHistory] = useState<Array<{ videoId: string; title: string; date: string; sentences?: Sentence[]; videoDetails?: VideoDetails }>>([]);
+
+  // Appwrite Add Vocabulary Modal states
+  const [isVocabModalOpen, setIsVocabModalOpen] = useState(false);
+  const [vocabDefaultWord, setVocabDefaultWord] = useState("");
+  const [vocabContextSentence, setVocabContextSentence] = useState("");
+
+  const handleOpenAddVocab = (word: string = "", contextSentence: string = "") => {
+    setVocabDefaultWord(word);
+    setVocabContextSentence(contextSentence || (sentences[currentIndex]?.sentence || ""));
+    setIsVocabModalOpen(true);
+  };
 
   // Auto-change loading messages for realistic feel
   const loadingMessages = [
@@ -620,6 +633,17 @@ Ví dụ định dạng đầu ra chuẩn:
                         <Shuffle size={13} />
                         <span>Ngẫu nhiên</span>
                       </button>
+
+                      {/* Add Vocabulary to Appwrite Button */}
+                      <button
+                        id="add-vocab-appwrite-button"
+                        onClick={() => handleOpenAddVocab("", sentences[currentIndex]?.sentence || "")}
+                        className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95"
+                        title="Lưu từ vựng mới trong câu này vào Appwrite Cloud (Database của Learning-English-App)"
+                      >
+                        <BookmarkPlus size={14} className="text-indigo-600" />
+                        <span>+ Thêm từ vựng (Appwrite)</span>
+                      </button>
                     </div>
                   </div>
 
@@ -892,6 +916,14 @@ Ví dụ định dạng đầu ra chuẩn:
       <footer className="py-6 border-t border-slate-200 bg-white text-center text-xs text-slate-500 mt-auto shadow-inner">
         <p>© 2026 YouTube Dictation Practice • Công cụ giáo dục số cao cấp</p>
       </footer>
+
+      {/* Add Vocabulary Modal (Appwrite Cloud Sync) */}
+      <AddVocabularyModal
+        isOpen={isVocabModalOpen}
+        onClose={() => setIsVocabModalOpen(false)}
+        defaultWord={vocabDefaultWord}
+        contextSentence={vocabContextSentence}
+      />
     </div>
   );
 }

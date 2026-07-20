@@ -592,6 +592,147 @@ Hãy trả về kết quả dưới dạng cấu trúc JSON chính xác tuyệt 
   }
 });
 
+// Appwrite Vocabulary Sync Endpoints
+app.post("/api/vocabulary/lookup-ai", async (req, res) => {
+  try {
+    const { word, contextSentence } = req.body;
+    if (!word || !word.trim()) {
+      res.status(400).json({ error: "Vui lòng nhập từ vựng cần tra cứu." });
+      return;
+    }
+
+    if (!ai) {
+      res.status(400).json({ error: "Thiếu cấu hình Gemini API Key." });
+      return;
+    }
+
+    const prompt = `Bạn là một từ điển Anh - Việt chuyên nghiệp. Hãy phân tích từ vựng tiếng Anh sau và trả về thông tin chi tiết bằng tiếng Việt:
+Từ vựng: "${word.trim()}"
+${contextSentence ? `Câu ngữ cảnh: "${contextSentence.trim()}"` : ""}
+
+Nhiệm vụ:
+1. "vietnamese": Nghĩa tiếng Việt chính xác, phổ biến và ngắn gọn của từ (ví dụ: "sự tồn tại, sự sống sót").
+2. "grammar": Từ loại chính (ví dụ: "noun", "verb", "adjective", "adverb", "phrase").
+3. "englishSentence": Câu ví dụ minh họa bằng tiếng Anh (ưu tiên dùng chính câu ngữ cảnh nếu có, hoặc tạo câu ví dụ tự nhiên ngắn gọn).
+4. "vietnameseSentence": Dịch nghĩa câu ví dụ sang tiếng Việt trôi chảy.
+
+Trả về dữ liệu theo đúng cấu trúc JSON.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          required: ["vietnamese", "grammar", "englishSentence", "vietnameseSentence"],
+          properties: {
+            vietnamese: { type: Type.STRING },
+            grammar: { type: Type.STRING },
+            englishSentence: { type: Type.STRING },
+            vietnameseSentence: { type: Type.STRING },
+          },
+        },
+      },
+    });
+
+    const text = response.text;
+    if (!text) throw new Error("Gemini returned empty text for lookup");
+    res.json(JSON.parse(text));
+  } catch (error: any) {
+    console.error("Vocabulary lookup AI error:", error);
+    res.status(500).json({ error: error.message || "Không thể tra cứu từ vựng bằng AI." });
+  }
+});
+
+app.post("/api/vocabulary/add-appwrite", async (req, res) => {
+  try {
+    const {
+      word,
+      vietnamese,
+      grammar,
+      category,
+      englishSentence,
+      vietnameseSentence
+    } = req.body;
+
+    if (!word || !word.trim()) {
+      res.status(400).json({ error: "Vui lòng cung cấp từ vựng." });
+      return;
+    }
+
+    const APPWRITE_ENDPOINT = "https://fra.cloud.appwrite.io/v1";
+    const APPWRITE_PROJECT_ID = "68cf65390012ceaa2085";
+    const APPWRITE_DATABASE_ID = "68cfb8c900053dca6f90";
+    const APPWRITE_COLLECTION_ID = "vocabularies";
+
+    // Format sentences JSON string matching Appwrite schema
+    const sentencesArr = [
+      {
+        sentences: englishSentence || "",
+        vietnamese: vietnameseSentence || "",
+        grammar: grammar || ""
+      }
+    ];
+
+    const documentData = {
+      word: word.trim(),
+      sentences: JSON.stringify(sentencesArr),
+      vietnamese: (vietnamese || "").trim(),
+      grammar: (grammar || "").trim(),
+      createdAt: String(Date.now()),
+      lastStudiedAt: String(Date.now()),
+      priorityScore: "0",
+      category: category === "TOEIC" ? "TOEIC" : "GENERAL",
+      totalAttempts: "0",
+      correctAttempts: "0",
+      memoryScore: "0",
+      last10Attempts: "[]"
+    };
+
+    const generateUniqueId = () => {
+      const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+      let result = "";
+      for (let i = 0; i < 20; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return result;
+    };
+
+    const documentId = generateUniqueId();
+    const appwriteUrl = `${APPWRITE_ENDPOINT}/databases/${APPWRITE_DATABASE_ID}/collections/${APPWRITE_COLLECTION_ID}/documents`;
+
+    const appwriteRes = await fetch(appwriteUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Appwrite-Project": APPWRITE_PROJECT_ID
+      },
+      body: JSON.stringify({
+        documentId: documentId,
+        data: documentData
+      })
+    });
+
+    const responseData = await appwriteRes.json();
+
+    if (!appwriteRes.ok) {
+      console.error("Appwrite error response:", responseData);
+      throw new Error(responseData.message || "Lỗi lưu từ vựng lên Appwrite Database.");
+    }
+
+    res.json({
+      success: true,
+      message: `Đã đồng bộ từ "${word.trim()}" lên Appwrite Cloud thành công!`,
+      documentId: responseData.$id || documentId,
+      data: responseData
+    });
+  } catch (error: any) {
+    console.error("Error adding vocabulary to Appwrite:", error);
+    res.status(500).json({ error: error.message || "Không thể kết nối đến Appwrite Server." });
+  }
+});
+
 // Configure Vite middleware or serve static production build
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
