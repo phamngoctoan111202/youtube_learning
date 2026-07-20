@@ -214,10 +214,11 @@ app.post("/api/transcript", async (req, res) => {
 Hãy thực hiện việc phân đoạn câu, sửa lỗi viết hoa, dấu câu cho các đoạn phụ đề thô dưới đây.
 
 Nhiệm vụ của bạn:
-1. Ghép các từ/phân đoạn thô liền kề để tạo thành các câu nói hoàn chỉnh, có ý nghĩa trọn vẹn và tự nhiên nhất.
-2. Thêm dấu câu thích hợp (chấm, phẩy, hỏi chấm, cảm thán) và viết hoa chữ cái đầu câu.
-3. KHÔNG ĐƯỢC tự ý thêm bớt hay thay đổi từ ngữ nào trong lời thoại gốc để giữ tính chính xác của bài nghe chính tả.
-4. QUAN TRỌNG: Nếu dữ liệu phụ đề thô ĐÃ CÓ SẴN các mốc thời gian (ví dụ: "0.0s - 5.5s" hoặc "0:01 - 0:04"), hãy trích xuất và BẮT BUỘC SỬ DỤNG CHÍNH XÁC các mốc thời gian đó (chuyển đổi sang định dạng số giây) cho các câu tương ứng. CHỈ KHI văn bản KHÔNG có mốc thời gian, bạn mới được phép tự ước lượng mốc thời gian tăng dần liên tục và tự nhiên.
+1. Phân chia văn bản thành các câu hoặc mệnh đề NGẮN GỌN VỪA PHẢI, cực kỳ thích hợp cho luyện chép chính tả (mỗi phân đoạn tối ưu từ 3 đến 8 giây, khoảng 6 - 12 từ).
+2. QUAN TRỌNG: Nếu câu quá dài hoặc chứa các mệnh đề nối bằng "and", "but", "where", "so", "because", "when", v.v. (ví dụ: "I just woke up from my dream where you and I had to say goodbye and I don't know what it all means..."), hãy CHỦ ĐỘNG TÁCH THÀNH CÁC MỆNH ĐỀ NHỎ RIÊNG BIỆT để người học dễ tập viết bài.
+3. Thêm dấu câu thích hợp (chấm, phẩy, hỏi chấm, cảm thán) và viết hoa chữ cái đầu câu.
+4. KHÔNG ĐƯỢC tự ý thêm bớt hay thay đổi từ ngữ nào trong lời thoại gốc để giữ tính chính xác của bài nghe chính tả.
+5. QUAN TRỌNG VỀ THỜI GIAN: Nếu dữ liệu phụ đề thô ĐÃ CÓ SẴN các mốc thời gian (ví dụ: "0.0s - 5.5s" hoặc "0:01 - 0:04"), hãy trích xuất và BẮT BUỘC SỬ DỤNG CHÍNH XÁC mốc thời gian tương ứng cho mệnh đề đã tách đó. CHỈ KHI văn bản KHÔNG có mốc thời gian, bạn mới tự ước lượng mốc thời gian tăng dần liên tục và hợp lý.
 
 Dữ liệu phụ đề thô:
 ${userRawText}
@@ -358,12 +359,13 @@ Hãy phân tích kỹ lưỡng và trả về danh sách các câu đã phân đ
                 try {
                   const prompt = `Bạn là một chuyên gia ngôn ngữ học và dịch thuật chính tả. Hãy thực hiện việc phân đoạn câu và sửa lỗi viết hoa, dấu câu cho các phân đoạn phụ đề thô của YouTube dưới đây.
 Nhiệm vụ của bạn:
-1. Ghép các phân đoạn thô liền kề để tạo thành các câu nói hoàn chỉnh, có ý nghĩa trọn vẹn và tự nhiên.
-2. Thêm dấu câu thích hợp (chấm, phẩy, hỏi chấm, cảm thán) và viết hoa chữ cái đầu câu.
-3. KHÔNG ĐƯỢC thêm bớt hay thay đổi từ ngữ nào trong câu nói để tránh làm mất nghĩa gốc. Giữ nguyên từ ngữ nói của người nói.
-4. Xác định mốc thời gian:
-   - "start": Là thời gian bắt đầu (giây) của phân đoạn thô đầu tiên cấu thành nên câu này.
-   - "end": Là thời gian kết thúc (giây) của phân đoạn thô cuối cùng cấu thành nên câu này (tính bằng start + duration của phân đoạn đó).
+1. Ghép các phân đoạn thô liền kề để tạo thành các câu hoặc mệnh đề NGẮN GỌN, vừa phải (mỗi phân đoạn khoảng 3 đến 8 giây, từ 6 đến 12 từ) nhằm phục vụ tối ưu cho việc nghe chép chính tả.
+2. NẾU CÂU QUÁ DÀI hoặc chứa nhiều mệnh đề ghép với từ nối "and", "but", "where", "because", "so", hãy CHỦ ĐỘNG TÁCH THÀNH CÁC MỆNH ĐỀ NGẮN HƠN.
+3. Thêm dấu câu thích hợp (chấm, phẩy, hỏi chấm, cảm thán) và viết hoa chữ cái đầu câu.
+4. KHÔNG ĐƯỢC thêm bớt hay thay đổi từ ngữ nào trong câu nói để tránh làm mất nghĩa gốc. Giữ nguyên lời nói gốc.
+5. Xác định mốc thời gian:
+   - "start": Thời gian bắt đầu (giây) của phân đoạn thô đầu tiên thuộc câu/mệnh đề này.
+   - "end": Thời gian kết thúc (giây) của phân đoạn thô cuối cùng thuộc câu/mệnh đề này (tính bằng start + duration của phân đoạn đó).
 
 Dữ liệu phụ đề thô (dưới dạng JSON):
 ${JSON.stringify(chunk, null, 2)}
