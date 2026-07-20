@@ -303,7 +303,12 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col font-sans" id="app-root-container">
-      <Header />
+      <Header onGoHome={() => {
+        setVideoDetails(null);
+        setSentences([]);
+        setEvaluationResult(null);
+        setUserInput("");
+      }} />
 
       <main className="flex-1 py-3 px-2 sm:px-4 md:px-6 max-w-[1700px] w-full mx-auto flex flex-col gap-5">
         <AnimatePresence mode="wait">
