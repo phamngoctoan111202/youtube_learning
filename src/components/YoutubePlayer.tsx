@@ -172,7 +172,7 @@ export default function YoutubePlayer({
           const time = playerRef.current.getCurrentTime();
           setCurrentTime(time);
 
-          if (time >= paddedEnd) {
+          if (time >= paddedEnd - 0.05) {
             if (isLooping) {
               playerRef.current.seekTo(paddedStart, true);
               playerRef.current.playVideo();
@@ -372,20 +372,30 @@ export default function YoutubePlayer({
 
       {/* Video / Audio Area */}
       <div className={`relative bg-black flex items-center justify-center ${isAndroid && hideVideo ? 'h-12' : 'aspect-video'}`}>
-        {/* The Actual IFrame wrapper */}
+        {/* The Actual IFrame wrapper with crop zoom to hide YouTube 'More Videos' and title overlays */}
         <div
-          className={`w-full h-full absolute top-0 left-0 transition-opacity duration-300 ${
+          className={`w-full h-full absolute top-0 left-0 overflow-hidden transition-opacity duration-300 ${
             hideVideo ? "opacity-0 pointer-events-none" : "opacity-100"
           }`}
         >
-          <div id={containerId} className="w-full h-full"></div>
+          <div
+            id={containerId}
+            className="w-full h-[116%] -top-[8%] relative transform scale-[1.12] origin-center"
+          ></div>
+
+          {/* Transparent Click Shield to block YouTube related videos / external popups while allowing video play/pause */}
+          <div
+            onClick={isPlaying ? pauseSegment : playSegment}
+            className="absolute inset-0 z-10 cursor-pointer"
+            title={isPlaying ? "Nhấn để tạm dừng" : "Nhấn để phát video"}
+          />
         </div>
 
         {/* Subtitle Banner Overlay when Subtitles are ON */}
         {showSubtitles && currentSentenceText && !hideVideo && (
-          <div className="absolute bottom-2 left-2 right-2 z-20 pointer-events-none flex justify-center">
-            <div className="bg-slate-950/85 text-white font-bold text-xs px-3 py-1.5 rounded-lg backdrop-blur-md border border-white/15 shadow-xl text-center max-w-lg leading-relaxed">
-              <span className="text-rose-400 font-mono text-[8px] block uppercase tracking-widest font-extrabold mb-0.5">Phụ Đề Video (CC)</span>
+          <div className="absolute bottom-6 sm:bottom-8 left-3 right-3 z-30 pointer-events-none flex justify-center">
+            <div className="bg-slate-950/90 text-white font-bold text-xs sm:text-sm px-4 py-2 rounded-xl backdrop-blur-md border border-white/20 shadow-2xl text-center max-w-xl leading-relaxed">
+              <span className="text-rose-400 font-mono text-[9px] block uppercase tracking-widest font-extrabold mb-0.5">Phụ Đề Video (CC)</span>
               {currentSentenceText}
             </div>
           </div>
