@@ -3,6 +3,8 @@ export interface Sentence {
   sentence: string;
   start: number;
   end: number;
+  isMerged?: boolean;
+  mergedFrom?: Sentence[];
 }
 
 export interface VideoDetails {

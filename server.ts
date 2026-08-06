@@ -213,12 +213,16 @@ app.post("/api/transcript", async (req, res) => {
         const prompt = `Bạn là một chuyên gia ngôn ngữ học tiếng Anh và trợ lý giảng dạy xuất sắc. Dưới đây là phụ đề thô dạng văn bản được người dùng sao chép thủ công.
 Hãy thực hiện việc phân đoạn câu, sửa lỗi viết hoa, dấu câu cho các đoạn phụ đề thô dưới đây.
 
-Nhiệm vụ của bạn:
-1. Phân chia văn bản thành các câu hoặc mệnh đề NGẮN GỌN VỪA PHẢI, cực kỳ thích hợp cho luyện chép chính tả (mỗi phân đoạn tối ưu từ 3 đến 8 giây, khoảng 6 - 12 từ).
-2. QUAN TRỌNG: Nếu câu quá dài hoặc chứa các mệnh đề nối bằng "and", "but", "where", "so", "because", "when", v.v. (ví dụ: "I just woke up from my dream where you and I had to say goodbye and I don't know what it all means..."), hãy CHỦ ĐỘNG TÁCH THÀNH CÁC MỆNH ĐỀ NHỎ RIÊNG BIỆT để người học dễ tập viết bài.
-3. Thêm dấu câu thích hợp (chấm, phẩy, hỏi chấm, cảm thán) và viết hoa chữ cái đầu câu.
+Quy tắc quan trọng:
+1. CHIA NHỎ CÂU: Mỗi phân đoạn CHỈ NÊN DÀI TỪ 3 ĐẾN 8 GIÂY (tối đa 6 - 12 từ). NẾU CÂU QUÁ DÀI hoặc là câu ghép chứa các mệnh đề nối như "where", "and", "but", "so", "because", "when", v.v. -> BẮT BUỘC TÁCH THÀNH CÁC MỆNH ĐỀ NHỎ RIÊNG BIỆT để người học dễ tập viết.
+2. MỐC THỜI GIAN CHÍNH XÁC: Nếu dữ liệu phụ đề thô ĐÃ CÓ SẴN các mốc thời gian (ví dụ: "(0:10 - 0:18)" hoặc "0.0s - 5.5s"), hãy trích xuất và BẮT BUỘC SỬ DỤNG CHÍNH XÁC mốc thời gian tương ứng cho mệnh đề đã tách đó. CHỈ KHI văn bản KHÔNG có mốc thời gian, bạn mới tự ước lượng mốc thời gian tăng dần liên tục và hợp lý.
+3. KHÔNG DỊCH SANG TIẾNG VIỆT, giữ nguyên tiếng Anh gốc (chỉ thêm dấu câu thích hợp và viết hoa chữ cái đầu câu).
 4. KHÔNG ĐƯỢC tự ý thêm bớt hay thay đổi từ ngữ nào trong lời thoại gốc để giữ tính chính xác của bài nghe chính tả.
-5. QUAN TRỌNG VỀ THỜI GIAN: Nếu dữ liệu phụ đề thô ĐÃ CÓ SẴN các mốc thời gian (ví dụ: "0.0s - 5.5s" hoặc "0:01 - 0:04"), hãy trích xuất và BẮT BUỘC SỬ DỤNG CHÍNH XÁC mốc thời gian tương ứng cho mệnh đề đã tách đó. CHỈ KHI văn bản KHÔNG có mốc thời gian, bạn mới tự ước lượng mốc thời gian tăng dần liên tục và hợp lý.
+
+Ví dụ định dạng phân đoạn chuẩn:
+(0:10 - 0:18): I just woke up from my dream where you and I had to say goodbye
+(0:18 - 0:23): and I don't know what it all means
+(0:23 - 0:28): but since I survived I realized
 
 Dữ liệu phụ đề thô:
 ${userRawText}
@@ -357,15 +361,20 @@ Hãy phân tích kỹ lưỡng và trả về danh sách các câu đã phân đ
 
               const segmentPromises = chunks.map(async (chunk, chunkIdx) => {
                 try {
-                  const prompt = `Bạn là một chuyên gia ngôn ngữ học và dịch thuật chính tả. Hãy thực hiện việc phân đoạn câu và sửa lỗi viết hoa, dấu câu cho các phân đoạn phụ đề thô của YouTube dưới đây.
-Nhiệm vụ của bạn:
-1. Ghép các phân đoạn thô liền kề để tạo thành các câu hoặc mệnh đề NGẮN GỌN, vừa phải (mỗi phân đoạn khoảng 3 đến 8 giây, từ 6 đến 12 từ) nhằm phục vụ tối ưu cho việc nghe chép chính tả.
-2. NẾU CÂU QUÁ DÀI hoặc chứa nhiều mệnh đề ghép với từ nối "and", "but", "where", "because", "so", hãy CHỦ ĐỘNG TÁCH THÀNH CÁC MỆNH ĐỀ NGẮN HƠN.
-3. Thêm dấu câu thích hợp (chấm, phẩy, hỏi chấm, cảm thán) và viết hoa chữ cái đầu câu.
-4. KHÔNG ĐƯỢC thêm bớt hay thay đổi từ ngữ nào trong câu nói để tránh làm mất nghĩa gốc. Giữ nguyên lời nói gốc.
-5. Xác định mốc thời gian:
-   - "start": Thời gian bắt đầu (giây) của phân đoạn thô đầu tiên thuộc câu/mệnh đề này.
-   - "end": Thời gian kết thúc (giây) của phân đoạn thô cuối cùng thuộc câu/mệnh đề này (tính bằng start + duration của phân đoạn đó).
+                  const prompt = `Bạn là một chuyên gia ngôn ngữ học và trợ lý nghe chép chính tả xuất sắc. Hãy thực hiện việc phân đoạn câu và sửa lỗi viết hoa, dấu câu cho các phân đoạn phụ đề thô của YouTube dưới đây.
+
+Quy tắc quan trọng:
+1. CHIA NHỎ CÂU: Mỗi phân đoạn CHỈ NÊN DÀI TỪ 3 ĐẾN 8 GIÂY (tối đa 6 - 12 từ). NẾU CÂU QUÁ DÀI hoặc là câu ghép chứa các mệnh đề nối như "where", "and", "but", "so", "because", "when", v.v. -> BẮT BUỘC TÁCH THÀNH CÁC MỆNH ĐỀ NHỎ RIÊNG BIỆT để người học dễ tập viết.
+2. KHÔNG DỊCH SANG TIẾNG VIỆT, giữ nguyên tiếng Anh gốc (chỉ thêm dấu câu thích hợp và viết hoa chữ cái đầu câu).
+3. KHÔNG ĐƯỢC tự ý thêm bớt hay thay đổi từ ngữ nào trong câu nói để tránh làm mất nghĩa gốc.
+4. MỐC THỜI GIAN CHÍNH XÁC:
+   - "start": Thời gian bắt đầu (giây) của phân đoạn thô đầu tiên thuộc mệnh đề này.
+   - "end": Thời gian kết thúc (giây) của phân đoạn thô cuối cùng thuộc mệnh đề này (tính bằng start + duration của phân đoạn đó).
+
+Ví dụ định dạng phân đoạn chuẩn:
+(0:10 - 0:18): I just woke up from my dream where you and I had to say goodbye
+(0:18 - 0:23): and I don't know what it all means
+(0:23 - 0:28): but since I survived I realized
 
 Dữ liệu phụ đề thô (dưới dạng JSON):
 ${JSON.stringify(chunk, null, 2)}
@@ -495,43 +504,69 @@ app.post("/api/evaluate", async (req, res) => {
        return;
     }
 
+    const cleanTextForComparison = (t: string) =>
+      (t || "")
+        .toLowerCase()
+        .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'–—]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    const normOriginal = (original || "").replace(/\s+/g, " ").trim();
+    const normInput = (input || "").replace(/\s+/g, " ").trim();
+
+    // Fast-track exact match (ignoring whitespace, punctuation & casing)
+    if (cleanTextForComparison(normOriginal) === cleanTextForComparison(normInput)) {
+      res.json({
+        accuracy: 100,
+        feedback: "Xuất sắc! Bạn chép hoàn toàn chính xác.",
+        corrections: [],
+      });
+      return;
+    }
+
     if (!ai) {
-      // Basic fallback comparison
-      const cleanText = (t: string) =>
-        t
-          .toLowerCase()
-          .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"']/g, "")
-          .replace(/\s+/g, " ")
-          .trim();
-      const o = cleanText(original);
-      const i = cleanText(input || "");
-      const matchedWords = o.split(" ").filter((w) => i.includes(w)).length;
-      const totalWords = o.split(" ").length;
-      const percent = totalWords > 0 ? Math.round((matchedWords / totalWords) * 100) : 0;
+      // Improved fallback comparison
+      const oWords = cleanTextForComparison(normOriginal).split(" ").filter(Boolean);
+      const iWords = cleanTextForComparison(normInput).split(" ").filter(Boolean);
+
+      let matched = 0;
+      const iWordsCopy = [...iWords];
+      for (const w of oWords) {
+        const idx = iWordsCopy.indexOf(w);
+        if (idx !== -1) {
+          matched++;
+          iWordsCopy.splice(idx, 1);
+        }
+      }
+      const percent = oWords.length > 0 ? Math.round((matched / oWords.length) * 100) : 0;
 
       let feedback = "Cố gắng lên nhé!";
       if (percent >= 95) feedback = "Xuất sắc! Bạn chép hoàn toàn chính xác.";
       else if (percent >= 80) feedback = "Rất tốt! Chỉ sai một vài lỗi nhỏ.";
       else if (percent >= 50) feedback = "Tốt! Cần chú ý kỹ hơn các từ khó.";
 
-       res.json({
+      res.json({
         accuracy: percent,
         feedback,
         corrections: [],
       });
-       return;
+      return;
     }
 
     const prompt = `So sánh câu đã gõ của người học với câu gốc để đánh giá mức độ chính xác khi luyện nghe chép chính tả.
-Hãy bỏ qua các khác biệt nhỏ vô hại về viết hoa hay dấu câu ở cuối câu trừ khi nó làm thay đổi hoàn toàn nghĩa của câu.
 
-Câu gốc: "${original}"
-Câu người học gõ: "${input || ""}"
+LƯU Ý QUAN TRỌNG VỀ KHOẢNG TRẮNG VÀ DẤU CÂU:
+- BẮT BUỘC bỏ qua mọi sự khác biệt về khoảng trắng (ví dụ: nhiều dấu cách liền nhau, xuống dòng, khoảng trắng ở đầu/cuối câu, khoảng trắng trước dấu câu). Xem "word1  word2" và "word1 word2" là hoàn toàn GIỐNG NHAU.
+- Bỏ qua các khác biệt nhỏ vô hại về viết hoa hay dấu câu ở cuối câu.
+- KHÔNG tạo lỗi trong "corrections" hoặc trừ điểm vì các dấu cách dư thừa hoặc thiếu dấu cách.
+
+Câu gốc: "${normOriginal}"
+Câu người học gõ: "${normInput}"
 
 Đánh giá các yếu tố sau:
 1. "accuracy": Số nguyên từ 0 đến 100 thể hiện mức độ chính xác từ vựng (percentage).
 2. "feedback": Lời nhận xét khích lệ, vui tươi, giàu tính giáo dục bằng tiếng Việt (ví dụ: "Xuất sắc! Không sai một từ nào!", "Tuyệt vời, bạn chỉ nhầm một chút xíu thôi!", "Tốt rồi, cố gắng nghe kỹ các âm đuôi nhé", "Sai hơi nhiều rồi nè, nghe kỹ lại và viết lại nhé!").
-3. "corrections": Danh sách các lỗi sai cụ thể được tìm thấy. Mỗi lỗi gồm:
+3. "corrections": Danh sách các lỗi sai từ vựng cụ thể (KHÔNG bao gồm lỗi về dấu cách). Mỗi lỗi gồm:
    - "word": từ hoặc cụm từ bị viết sai trong bài gõ của người học.
    - "expected": từ hoặc cụm từ chính xác lẽ ra phải viết (theo câu gốc).
    - "type": phân loại lỗi ("missing" - thiếu từ, "spelling" - viết sai chính tả, "incorrect" - viết sai từ).

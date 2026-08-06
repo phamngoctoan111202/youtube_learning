@@ -6,31 +6,31 @@ interface HeaderProps {
 
 export default function Header({ onGoHome }: HeaderProps) {
   return (
-    <header className="py-3 px-3 md:px-6 border-b-2 border-slate-200/80 bg-white/90 backdrop-blur-md sticky top-0 z-50 shadow-sm">
+    <header className="py-3 px-3 md:px-6 border-b-2 border-slate-200/80 bg-white/90 backdrop-blur-md lg:sticky top-0 z-50 shadow-sm">
       <div className="max-w-[1700px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
         {/* Brand Logo - Clickable to return Home */}
         <button
           onClick={onGoHome}
-          className="flex items-center gap-3 text-left group hover:opacity-90 transition-opacity cursor-pointer focus:outline-none"
+          className="flex items-center gap-2 text-left group hover:opacity-90 transition-opacity cursor-pointer focus:outline-none"
           title="Quay về trang chính"
         >
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-500 to-red-600 flex items-center justify-center shadow-md shadow-rose-500/10 group-hover:scale-105 transition-transform">
-            <Headphones className="text-white" size={20} />
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-rose-500 to-red-600 flex items-center justify-center shadow-md shadow-rose-500/10 group-hover:scale-105 transition-transform">
+            <Headphones className="text-white" size={18} />
           </div>
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="text-slate-900 font-bold text-lg tracking-tight font-display group-hover:text-blue-600 transition-colors">YouTube Dictation</span>
+              <span className="text-slate-900 font-bold text-base sm:text-lg tracking-tight font-display group-hover:text-blue-600 transition-colors">YouTube Dictation</span>
               <span className="bg-rose-500/10 text-rose-600 text-[10px] font-bold px-1.5 py-0.5 rounded border border-rose-500/20 uppercase flex items-center gap-1 font-mono">
                 <Youtube size={10} />
                 <span>Edu</span>
               </span>
             </div>
-            <p className="text-slate-500 text-xs font-medium">Luyện Chép Chính Tả Thông Minh</p>
+            <p className="text-slate-500 text-[11px] sm:text-xs font-medium hidden sm:block">Luyện Chép Chính Tả Thông Minh</p>
           </div>
         </button>
 
         {/* Feature badge */}
-        <div className="flex items-center gap-2 bg-slate-100/80 border border-slate-200 px-3.5 py-1.5 rounded-full text-xs font-medium text-slate-700">
+        <div className="hidden md:flex items-center gap-2 bg-slate-100/80 border border-slate-200 px-3.5 py-1.5 rounded-full text-xs font-medium text-slate-700">
           <Sparkles size={13} className="text-amber-500 animate-pulse" />
           <span>Tự Động Phân Đoạn Bằng AI Gemini</span>
         </div>

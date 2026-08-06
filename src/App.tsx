@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Search,
   Youtube,
@@ -23,13 +23,19 @@ import {
   Code,
   AlertTriangle,
   Trash2,
-  BookmarkPlus
+  BookmarkPlus,
+  Layers,
+  Scissors,
+  Edit3,
+  Square,
+  CheckSquare
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import Header from "./components/Header";
 import YoutubePlayer from "./components/YoutubePlayer";
 import FeedbackCard from "./components/FeedbackCard";
 import AddVocabularyModal from "./components/AddVocabularyModal";
+import EditSentenceModal from "./components/EditSentenceModal";
 import { RECOMMENDED_VIDEOS } from "./data";
 import { Sentence, VideoDetails, EvaluationResult } from "./types";
 
@@ -69,10 +75,100 @@ export default function App() {
   const [vocabDefaultWord, setVocabDefaultWord] = useState("");
   const [vocabContextSentence, setVocabContextSentence] = useState("");
 
+  // Sentence selection, merge & edit modal states
+  const [selectedSentenceIds, setSelectedSentenceIds] = useState<number[]>([]);
+  const [editingSentence, setEditingSentence] = useState<Sentence | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
   const handleOpenAddVocab = (word: string = "", contextSentence: string = "") => {
     setVocabDefaultWord(word);
     setVocabContextSentence(contextSentence || (sentences[currentIndex]?.sentence || ""));
     setIsVocabModalOpen(true);
+  };
+
+  const handleToggleSelectSentence = (sentenceId: number, e: React.MouseEvent | React.ChangeEvent) => {
+    e.stopPropagation();
+    setSelectedSentenceIds((prev) =>
+      prev.includes(sentenceId)
+        ? prev.filter((id) => id !== sentenceId)
+        : [...prev, sentenceId].sort((a, b) => a - b)
+    );
+  };
+
+  const handleMergeSentences = () => {
+    if (selectedSentenceIds.length < 2) return;
+    const sortedIds = [...selectedSentenceIds].sort((a, b) => a - b);
+    const selectedSentences = sentences.filter((s) => sortedIds.includes(s.id));
+    if (selectedSentences.length < 2) return;
+
+    const primaryId = selectedSentences[0].id;
+    const mergedText = selectedSentences.map((s) => s.sentence).join(" ");
+    const minStart = Math.min(...selectedSentences.map((s) => s.start));
+    const maxEnd = Math.max(...selectedSentences.map((s) => s.end));
+
+    const newMergedSentence: Sentence = {
+      id: primaryId,
+      sentence: mergedText,
+      start: minStart,
+      end: maxEnd,
+      isMerged: true,
+      mergedFrom: selectedSentences,
+    };
+
+    const idsToRemove = new Set(selectedSentences.map((s) => s.id));
+    const updatedSentences: Sentence[] = [];
+    for (let i = 0; i < sentences.length; i++) {
+      if (sentences[i].id === primaryId) {
+        updatedSentences.push(newMergedSentence);
+      } else if (!idsToRemove.has(sentences[i].id)) {
+        updatedSentences.push(sentences[i]);
+      }
+    }
+
+    setSentences(updatedSentences);
+    setSelectedSentenceIds([]);
+
+    const newIndex = updatedSentences.findIndex((s) => s.id === primaryId);
+    if (newIndex !== -1) {
+      setCurrentIndex(newIndex);
+      setUserInput("");
+      setEvaluationResult(null);
+    }
+  };
+
+  const handleUnmergeSentence = (sentenceToUnmerge: Sentence, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!sentenceToUnmerge.isMerged || !sentenceToUnmerge.mergedFrom) return;
+
+    const targetIdx = sentences.findIndex((s) => s.id === sentenceToUnmerge.id);
+    if (targetIdx === -1) return;
+
+    const updatedSentences = [
+      ...sentences.slice(0, targetIdx),
+      ...sentenceToUnmerge.mergedFrom,
+      ...sentences.slice(targetIdx + 1),
+    ];
+
+    setSentences(updatedSentences);
+    if (currentIndex >= updatedSentences.length) {
+      setCurrentIndex(Math.max(0, updatedSentences.length - 1));
+    }
+  };
+
+  const handleUpdateSentence = (updated: Sentence) => {
+    setSentences((prev) =>
+      prev.map((s) => (s.id === updated.id ? updated : s))
+    );
+    if (sentences[currentIndex]?.id === updated.id) {
+      setUserInput("");
+      setEvaluationResult(null);
+    }
+  };
+
+  const handleOpenEditSentence = (s: Sentence, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingSentence(s);
+    setIsEditModalOpen(true);
   };
 
   // Auto-change loading messages for realistic feel
@@ -124,6 +220,7 @@ export default function App() {
     setLoadingStep(0);
     setVideoDetails(null);
     setSentences([]);
+    setSelectedSentenceIds([]);
     setEvaluationResult(null);
     setUserInput("");
 
@@ -253,6 +350,25 @@ export default function App() {
     }
   };
 
+  // Input change & keydown handlers for Enter navigation
+  const handleInputChange = (val: string) => {
+    setUserInput(val);
+    if (evaluationResult !== null) {
+      setEvaluationResult(null);
+    }
+  };
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (evaluationResult !== null) {
+        handleNext();
+      } else if (!isEvaluating && userInput.trim()) {
+        handleCheck();
+      }
+    }
+  };
+
   // Navigation handlers
   const handleNext = () => {
     if (currentIndex < sentences.length - 1) {
@@ -305,6 +421,15 @@ export default function App() {
     }
   };
 
+  // Mobile detection
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 1024);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
   // Calculate stats
   const completedCount = Object.keys(progress).filter((key) => (progress[Number(key)] || 0) >= 90).length;
   const progressValues = Object.values(progress) as number[];
@@ -332,27 +457,27 @@ export default function App() {
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -15 }}
-              className="max-w-3xl mx-auto w-full flex flex-col gap-8 py-4"
+              className="max-w-3xl mx-auto w-full flex flex-col gap-4 sm:gap-8 py-2 sm:py-4 pb-28"
               id="landing-screen"
             >
               <div className="text-center flex flex-col items-center">
-                <div className="inline-flex p-3 bg-rose-500/10 border border-rose-500/20 text-rose-600 rounded-2xl mb-4">
+                <div className="hidden sm:inline-flex p-3 bg-rose-500/10 border border-rose-500/20 text-rose-600 rounded-2xl mb-4">
                   <Youtube size={36} />
                 </div>
-                <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight sm:text-4xl font-display">
+                <h2 className="text-xl sm:text-3xl font-extrabold text-slate-900 tracking-tight font-display">
                   Luyện nghe chính tả YouTube
                 </h2>
-                <p className="mt-3 text-slate-500 max-w-lg leading-relaxed text-sm sm:text-base font-medium">
+                <p className="mt-1 sm:mt-3 text-slate-500 max-w-lg leading-relaxed text-xs sm:text-sm font-medium hidden sm:block">
                   Chép chính tả là phương pháp đột phá để nâng cao phản xạ nghe hiểu ngôn ngữ. Dán một URL video YouTube có phụ đề và bắt đầu rèn luyện ngay!
                 </p>
               </div>
 
               {/* Submission panel */}
-              <div className="bg-white border-2 border-slate-200 rounded-3xl shadow-sm relative overflow-hidden" id="submission-panel">
+              <div className="bg-white border-2 border-slate-200 rounded-2xl sm:rounded-3xl shadow-sm relative overflow-hidden" id="submission-panel">
                 <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/5 rounded-full blur-3xl pointer-events-none"></div>
 
-                <div className="p-6 flex flex-col gap-5">
-                  <div className="flex flex-col gap-2">
+                <div className="p-4 sm:p-6 flex flex-col gap-4">
+                  <div className="flex flex-col gap-1.5">
                     <label htmlFor="youtube-url-input" className="text-xs font-bold text-slate-500 uppercase tracking-wider font-display">
                       Địa chỉ URL của video YouTube:
                     </label>
@@ -367,14 +492,14 @@ export default function App() {
                         value={urlInput}
                         onChange={(e) => setUrlInput(e.target.value)}
                         disabled={isLoading}
-                        className="w-full pl-10 pr-4 py-3.5 bg-slate-50 border-2 border-slate-200 focus:border-blue-500 focus:bg-white rounded-xl text-slate-800 placeholder-slate-400 outline-none transition-all text-sm font-mono font-medium"
+                        className="w-full pl-10 pr-4 py-2.5 sm:py-3.5 bg-slate-50 border-2 border-slate-200 focus:border-blue-500 focus:bg-white rounded-xl text-slate-800 placeholder-slate-400 outline-none transition-all text-xs sm:text-sm font-mono font-medium"
                       />
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-4">
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <div className="flex items-center justify-between flex-wrap gap-1">
                         <label htmlFor="pasted-text-input" className="text-xs font-bold text-slate-500 uppercase tracking-wider font-display">
                           Dán văn bản phụ đề thô (Không bắt buộc):
                         </label>
@@ -396,24 +521,24 @@ Ví dụ định dạng đầu ra chuẩn:
                             setIsCopied(true);
                             setTimeout(() => setIsCopied(false), 2000);
                           }}
-                          className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1.5 rounded-lg border transition-colors ${
+                          className={`flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg border transition-colors ${
                             isCopied 
                               ? "bg-emerald-50 text-emerald-600 border-emerald-200" 
                               : "bg-amber-50 text-amber-600 hover:text-amber-700 border-amber-200"
                           }`}
                         >
-                          {isCopied ? <Check size={14} /> : <Clipboard size={14} />}
-                          <span>{isCopied ? "Đã sao chép" : "Copy mẫu Prompt cho Gemini (Mẫu ngắn chép dễ)"}</span>
+                          {isCopied ? <Check size={12} /> : <Clipboard size={12} />}
+                          <span>{isCopied ? "Đã sao chép" : "Copy mẫu Prompt cho Gemini"}</span>
                         </button>
                       </div>
                       <textarea
                         id="pasted-text-input"
-                        rows={10}
-                        placeholder="Dán văn bản phụ đề thô ở đây.&#10;&#10;Hỗ trợ nhận dạng tự động:&#10;(0:10 - 0:18): I just woke up from my dream where you and I had to say goodbye&#10;(0:18 - 0:23): and I don't know what it all means..."
+                        rows={4}
+                        placeholder="Dán văn bản phụ đề thô ở đây.&#10;&#10;Hỗ trợ nhận dạng tự động:&#10;(0:10 - 0:18): I just woke up from my dream..."
                         value={pastedText}
                         onChange={(e) => setPastedText(e.target.value)}
                         disabled={isLoading}
-                        className="w-full p-3.5 bg-slate-50 border-2 border-slate-200 focus:border-blue-500 focus:bg-white rounded-xl text-slate-800 placeholder-slate-400 outline-none transition-all text-sm font-medium leading-relaxed resize-none"
+                        className="w-full p-2.5 sm:p-3.5 bg-slate-50 border-2 border-slate-200 focus:border-blue-500 focus:bg-white rounded-xl text-slate-800 placeholder-slate-400 outline-none transition-all text-xs sm:text-sm font-medium leading-relaxed resize-none"
                       />
                     </div>
 
@@ -568,6 +693,335 @@ Ví dụ định dạng đầu ra chuẩn:
                 </div>
               )}
             </motion.div>
+          ) : isMobile ? (
+            /* ================= MOBILE ACTIVE DICTATION INTERFACE ================= */
+            <motion.div
+              key="dictation-interface-mobile"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex flex-col gap-2 max-w-lg mx-auto w-full pb-20"
+              id="active-dictation-screen-mobile"
+            >
+              {/* Sticky YouTube Player at the top */}
+              <div className="sticky top-0 z-40 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm" id="mobile-player-container">
+                {videoDetails && sentences[currentIndex] && (
+                  <div className="p-0.5 bg-slate-900">
+                    <YoutubePlayer
+                      videoId={videoDetails.videoId}
+                      start={sentences[currentIndex].start}
+                      end={sentences[currentIndex].end}
+                      padding={padding}
+                      playTrigger={playTrigger}
+                      currentSentenceText={sentences[currentIndex]?.sentence}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Compact Video Info & Progress Bar */}
+              <div className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-xs flex items-center justify-between text-xs gap-2">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <h3 className="text-slate-800 text-[11px] font-bold truncate flex-1" title={videoDetails.title}>
+                    {videoDetails.title}
+                  </h3>
+                  <span className="text-[10px] font-mono font-bold text-blue-600 shrink-0 bg-blue-50 px-1.5 py-0.5 rounded">
+                    {completedCount}/{sentences.length} ({averageAccuracy}%)
+                  </span>
+                </div>
+                <button
+                  id="change-video-button-mobile"
+                  onClick={() => {
+                    setVideoDetails(null);
+                    setSentences([]);
+                    setEvaluationResult(null);
+                    setUserInput("");
+                  }}
+                  className="text-[10px] font-bold text-blue-600 hover:text-blue-500 flex items-center gap-0.5 shrink-0 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded cursor-pointer"
+                >
+                  <ArrowLeft size={10} />
+                  <span>Đổi Video</span>
+                </button>
+              </div>
+
+              {/* Playground & Dictation Card */}
+              <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-xs flex flex-col gap-2.5">
+                {/* Header line: Sentence number + Controls + Padding */}
+                <div className="flex items-center justify-between gap-1 pb-1.5 border-b border-slate-100 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-6 h-6 rounded bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center font-mono font-extrabold text-xs">
+                      {sentences[currentIndex]?.id}
+                    </span>
+                    <span className="text-slate-800 font-bold text-xs font-display">
+                      Câu {sentences[currentIndex]?.id}/{sentences.length}
+                    </span>
+                    <span className="text-slate-400 text-[9px] font-mono">
+                      ({sentences[currentIndex]?.start.toFixed(1)}s-{sentences[currentIndex]?.end.toFixed(1)}s)
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    {/* Padding selector */}
+                    <div className="flex gap-0.5 items-center mr-1">
+                      <span className="text-[9px] text-slate-400 font-mono">Đệm:</span>
+                      {[0, 1, 2].map((s) => (
+                        <button
+                          key={s}
+                          id={`padding-select-btn-mobile-${s}`}
+                          onClick={() => setPadding(s)}
+                          className={`px-1 py-0.5 rounded text-[9px] font-mono font-bold transition-colors cursor-pointer ${
+                            padding === s
+                              ? "bg-blue-600 text-white"
+                              : "text-slate-500 bg-slate-50 border border-slate-200"
+                          }`}
+                        >
+                          +{s}s
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Randomizer */}
+                    <button
+                      id="play-random-sentence-button-mobile"
+                      onClick={handleRandom}
+                      className="p-1 bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-xs transition-all cursor-pointer"
+                      title="Chọn ngẫu nhiên"
+                    >
+                      <Shuffle size={11} />
+                    </button>
+
+                    {/* Add Vocabulary Button */}
+                    <button
+                      id="add-vocab-appwrite-button-mobile"
+                      onClick={() => handleOpenAddVocab("", sentences[currentIndex]?.sentence || "")}
+                      className="flex items-center gap-1 px-2 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200/80 rounded-lg text-[10px] font-bold cursor-pointer"
+                    >
+                      <BookmarkPlus size={11} className="text-indigo-600" />
+                      <span>Từ vựng</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Text Editor */}
+                <div className="flex flex-col gap-1">
+                  <div className="flex justify-between items-center text-[10px]">
+                    <label htmlFor="dictation-textarea-mobile" className="text-slate-600 font-bold">
+                      Gõ câu bạn nghe được <span className="text-blue-600 font-mono">(Enter để nộp)</span>:
+                    </label>
+                    <span className="text-slate-400 font-mono">{userInput.length} ký tự</span>
+                  </div>
+
+                  <textarea
+                    id="dictation-textarea-mobile"
+                    placeholder="Nhập câu bạn nghe được... (Enter để nộp/chuyển câu)"
+                    value={userInput}
+                    onChange={(e) => handleInputChange(e.target.value)}
+                    onFocus={() => {
+                      setTimeout(() => {
+                        const el = document.getElementById("dictation-textarea-mobile");
+                        if (el) {
+                          el.scrollIntoView({ behavior: "smooth", block: "center" });
+                        }
+                      }, 250);
+                    }}
+                    onKeyDown={handleInputKeyDown}
+                    disabled={isEvaluating}
+                    rows={2}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 focus:border-blue-500 focus:bg-white rounded-lg text-slate-800 placeholder-slate-400 outline-none transition-all resize-none text-xs leading-relaxed"
+                  />
+                </div>
+
+                {/* Action controls */}
+                <div className="flex justify-between items-center gap-2 pt-0.5">
+                  <div className="flex items-center gap-1">
+                    <button
+                      id="prev-sentence-button-mobile"
+                      disabled={currentIndex === 0}
+                      onClick={handlePrev}
+                      className="p-2 bg-white border border-slate-200 disabled:bg-slate-50 disabled:text-slate-300 text-slate-600 rounded-lg transition-all flex items-center justify-center cursor-pointer"
+                    >
+                      <ArrowLeft size={13} />
+                    </button>
+
+                    <button
+                      id="play-audio-helper-button-mobile"
+                      onClick={triggerPlay}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition-all shadow-xs uppercase cursor-pointer"
+                    >
+                      <Volume2 size={12} />
+                      <span>Phát</span>
+                    </button>
+
+                    <button
+                      id="next-sentence-button-mobile"
+                      disabled={currentIndex === sentences.length - 1}
+                      onClick={handleNext}
+                      className="p-2 bg-white border border-slate-200 disabled:bg-slate-50 disabled:text-slate-300 text-slate-600 rounded-lg transition-all flex items-center justify-center cursor-pointer"
+                    >
+                      <ArrowRight size={13} />
+                    </button>
+                  </div>
+
+                  <button
+                    id="submit-check-button-mobile"
+                    disabled={isEvaluating || !userInput.trim()}
+                    onClick={handleCheck}
+                    className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xs transition-all shadow-xs flex items-center justify-center gap-1 uppercase cursor-pointer"
+                  >
+                    <Check size={12} />
+                    <span>Kiểm Tra</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Feedback results */}
+              <AnimatePresence mode="wait">
+                {(evaluationResult || isEvaluating) && (
+                  <FeedbackCard
+                    result={evaluationResult}
+                    isEvaluating={isEvaluating}
+                    onRetry={() => {
+                      setEvaluationResult(null);
+                      setUserInput("");
+                      triggerPlay();
+                    }}
+                  />
+                )}
+              </AnimatePresence>
+
+              {/* Info Note on Gemini accuracy */}
+              <div className="bg-slate-100/60 border border-slate-200/80 rounded-xl p-3 flex gap-2.5 text-[10px] text-slate-500 shadow-xs">
+                <Sparkles size={14} className="text-blue-500 shrink-0 mt-0.5" />
+                <p className="leading-normal font-medium">
+                  Hệ thống phân tích sâu sắc từ loại và lỗi chính tả bằng AI Gemini 2.5 Flash.
+                </p>
+              </div>
+
+              {/* Sentence list scroll area */}
+              <div className="bg-white border-2 border-slate-200 rounded-2xl overflow-hidden shadow-sm flex flex-col" id="mobile-sentence-list-card">
+                <div className="max-h-[280px] overflow-y-auto p-3 flex flex-col gap-2">
+                  <div className="flex items-center justify-between px-1 pb-1.5 border-b border-slate-100 flex-wrap gap-1">
+                    <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold font-mono">Danh sách câu ({sentences.length})</span>
+                    {selectedSentenceIds.length >= 2 && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={handleMergeSentences}
+                          className="flex items-center gap-1 px-2 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-[10px] font-bold shadow-xs cursor-pointer"
+                        >
+                          <Layers size={10} />
+                          <span>Gộp {selectedSentenceIds.length} câu</span>
+                        </button>
+                        <button
+                          onClick={() => setSelectedSentenceIds([])}
+                          className="px-1 text-[9px] text-slate-400 hover:text-slate-600"
+                        >
+                          Hủy
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {sentences.map((sentence, idx) => {
+                    const score = progress[sentence.id];
+                    const isCurrent = idx === currentIndex;
+                    const isSelected = selectedSentenceIds.includes(sentence.id);
+                    
+                    return (
+                      <div
+                        key={sentence.id}
+                        id={`sentence-list-btn-mobile-${idx}`}
+                        className={`w-full p-2.5 rounded-xl text-left transition-all border-2 flex items-start gap-2 ${
+                          isCurrent
+                            ? "bg-blue-50 border-blue-500/60 text-slate-900 shadow-xs"
+                            : isSelected
+                            ? "bg-indigo-50 border-indigo-300 text-slate-900"
+                            : "bg-white border-slate-200/60 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
+                        }`}
+                      >
+                        {/* Checkbox */}
+                        <button
+                          type="button"
+                          onClick={(e) => handleToggleSelectSentence(sentence.id, e)}
+                          className="mt-0.5 text-slate-400 hover:text-indigo-600 shrink-0 cursor-pointer"
+                          title="Tích chọn để gộp câu"
+                        >
+                          {isSelected ? (
+                            <CheckSquare size={14} className="text-indigo-600" />
+                          ) : (
+                            <Square size={14} className="text-slate-300" />
+                          )}
+                        </button>
+
+                        <div
+                          onClick={() => handleSelectSentence(idx)}
+                          className="flex-1 min-w-0 cursor-pointer"
+                        >
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {sentence.isMerged ? (
+                              <span className="px-1 py-0.2 bg-indigo-100 text-indigo-700 border border-indigo-200 rounded text-[8px] font-bold font-mono">
+                                [Đã gộp]
+                              </span>
+                            ) : (
+                              <div className={`w-4 h-4 rounded-md flex items-center justify-center shrink-0 text-[9px] font-mono font-extrabold ${
+                                isCurrent
+                                  ? "bg-blue-600 text-white"
+                                  : "bg-slate-100 text-slate-400 border border-slate-200/50"
+                              }`}>
+                                {sentence.id}
+                              </div>
+                            )}
+
+                            <p className={`text-[11px] leading-normal truncate flex-1 ${
+                              isCurrent ? "font-bold text-slate-900" : "text-slate-500"
+                            }`}>
+                              {sentence.sentence}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center justify-between mt-1 text-[8px] font-mono text-slate-400 font-semibold gap-1">
+                            <span className="flex items-center gap-0.5">
+                              <Clock size={8} />
+                              {sentence.start.toFixed(1)}s-{sentence.end.toFixed(1)}s
+                            </span>
+                            
+                            <div className="flex items-center gap-1">
+                              {score !== undefined && (
+                                <span className={`font-bold px-1.5 py-0.2 rounded border ${
+                                  score >= 90 ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "bg-blue-50 text-blue-600 border-blue-100"
+                                }`}>
+                                  {score}%
+                                </span>
+                              )}
+
+                              {sentence.isMerged && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleUnmergeSentence(sentence, e)}
+                                  className="flex items-center gap-0.5 px-1 py-0.2 bg-amber-50 text-amber-700 border border-amber-200 rounded text-[8px] font-bold"
+                                  title="Tách lại câu gốc"
+                                >
+                                  <Scissors size={8} />
+                                  <span>Tách</span>
+                                </button>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={(e) => handleOpenEditSentence(sentence, e)}
+                                className="p-0.5 text-slate-400 hover:text-blue-600 rounded"
+                                title="Chỉnh sửa câu"
+                              >
+                                <Edit3 size={10} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </motion.div>
           ) : (
             /* ================= ACTIVE DICTATION INTERFACE ================= */
             <motion.div
@@ -687,17 +1141,10 @@ Ví dụ định dạng đầu ra chuẩn:
 
                     <textarea
                       id="dictation-textarea"
-                      placeholder="Hãy gõ lại câu bạn nghe được tại đây... (Nhấn Enter để kiểm tra đáp án, Shift + Enter để xuống dòng)"
+                      placeholder="Hãy gõ lại câu bạn nghe được tại đây... (Nhấn Enter để kiểm tra đáp án, Enter phát nữa để sang câu kế tiếp, Shift + Enter để xuống dòng)"
                       value={userInput}
-                      onChange={(e) => setUserInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          if (!isEvaluating && userInput.trim()) {
-                            handleCheck();
-                          }
-                        }
-                      }}
+                      onChange={(e) => handleInputChange(e.target.value)}
+                      onKeyDown={handleInputKeyDown}
                       disabled={isEvaluating}
                       rows={5}
                       className="w-full p-5 bg-slate-50 border-2 border-dashed border-slate-200 focus:border-blue-500 focus:bg-white focus:ring-0 rounded-2xl text-slate-800 placeholder-slate-400 outline-none transition-all resize-none leading-relaxed text-base shadow-inner"
@@ -853,55 +1300,128 @@ Ví dụ định dạng đầu ra chuẩn:
                   )}
 
                   {/* Sentence list scroll area */}
-                  <div className="max-h-[360px] overflow-y-auto p-3 flex flex-col gap-2" id="sentence-scroll-list">
-                    <div className="text-[10px] text-slate-400 uppercase tracking-widest px-2 pb-1 font-bold font-mono">Danh sách câu cần nghe ({sentences.length})</div>
+                  <div className="max-h-[380px] overflow-y-auto p-3 flex flex-col gap-2" id="sentence-scroll-list">
+                    <div className="flex items-center justify-between px-2 pb-1.5 border-b border-slate-100 flex-wrap gap-2">
+                      <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold font-mono">
+                        Danh sách câu ({sentences.length})
+                      </span>
+                      {selectedSentenceIds.length >= 2 && (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={handleMergeSentences}
+                            className="flex items-center gap-1 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[10px] font-bold shadow-xs cursor-pointer transition-all animate-pulse"
+                            title="Gộp các câu đã chọn thành 1 câu dài"
+                          >
+                            <Layers size={11} />
+                            <span>Gộp {selectedSentenceIds.length} câu</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedSentenceIds([])}
+                            className="px-1.5 py-1 text-[10px] text-slate-400 hover:text-slate-600 cursor-pointer font-medium"
+                          >
+                            Hủy
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
                     {sentences.map((sentence, idx) => {
                       const score = progress[sentence.id];
                       const isCurrent = idx === currentIndex;
+                      const isSelected = selectedSentenceIds.includes(sentence.id);
                       
                       return (
-                        <button
+                        <div
                           key={sentence.id}
                           id={`sentence-list-btn-${idx}`}
-                          onClick={() => handleSelectSentence(idx)}
-                          className={`w-full p-3 rounded-2xl text-left transition-all border-2 flex items-start gap-2.5 ${
+                          className={`w-full p-3 rounded-2xl transition-all border-2 flex items-start gap-2.5 relative ${
                             isCurrent
-                              ? "bg-blue-50 border-blue-500/60 text-slate-900 shadow-sm"
-                              : "bg-white border-slate-200/60 text-slate-600 hover:bg-slate-50 hover:border-slate-300 hover:text-slate-800"
+                              ? "bg-blue-50/90 border-blue-500/70 text-slate-900 shadow-sm"
+                              : isSelected
+                              ? "bg-indigo-50/60 border-indigo-300 text-slate-900"
+                              : "bg-white border-slate-200/60 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
                           }`}
                         >
-                          {/* Number bullet */}
-                          <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 text-[10px] font-mono font-extrabold ${
-                            isCurrent
-                              ? "bg-blue-600 text-white"
-                              : "bg-slate-100 text-slate-400 border border-slate-200/50"
-                          }`}>
-                            {sentence.id}
-                          </div>
+                          {/* Checkbox for selection */}
+                          <button
+                            type="button"
+                            onClick={(e) => handleToggleSelectSentence(sentence.id, e)}
+                            className="mt-0.5 text-slate-400 hover:text-indigo-600 transition-colors shrink-0 cursor-pointer"
+                            title="Tích chọn để gộp câu"
+                          >
+                            {isSelected ? (
+                              <CheckSquare size={16} className="text-indigo-600 fill-indigo-100" />
+                            ) : (
+                              <Square size={16} className="text-slate-300 hover:text-slate-400" />
+                            )}
+                          </button>
 
-                          {/* Sentence preview or masked */}
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-xs leading-normal truncate ${
-                              isCurrent ? "font-bold text-slate-900" : "text-slate-500"
-                            }`}>
-                              {sentence.sentence}
-                            </p>
-                            <div className="flex items-center justify-between mt-1.5 text-[9px] font-mono text-slate-400 font-semibold">
+                          {/* Sentence body */}
+                          <div
+                            onClick={() => handleSelectSentence(idx)}
+                            className="flex-1 min-w-0 cursor-pointer"
+                          >
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {sentence.isMerged ? (
+                                <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 border border-indigo-200 rounded text-[9px] font-bold font-mono">
+                                  [Đã gộp #{sentence.id}]
+                                </span>
+                              ) : (
+                                <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 text-[10px] font-mono font-extrabold ${
+                                  isCurrent ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-400 border border-slate-200/50"
+                                }`}>
+                                  {sentence.id}
+                                </div>
+                              )}
+
+                              <p className={`text-xs leading-normal truncate flex-1 ${
+                                isCurrent ? "font-bold text-slate-900" : "text-slate-500"
+                              }`}>
+                                {sentence.sentence}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center justify-between mt-1.5 text-[9px] font-mono text-slate-400 font-semibold gap-1">
                               <span className="flex items-center gap-1">
                                 <Clock size={10} />
-                                {sentence.start.toFixed(1)}s - {sentence.end.toFixed(1)}s
+                                {sentence.start.toFixed(1)}s - {sentence.end.toFixed(1)}s ({(sentence.end - sentence.start).toFixed(1)}s)
                               </span>
                               
-                              {score !== undefined && (
-                                <span className={`font-bold px-1.5 py-0.2 rounded border ${
-                                  score >= 90 ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "bg-blue-50 text-blue-600 border-blue-100"
-                                }`}>
-                                  Điểm: {score}%
-                                </span>
-                              )}
+                              <div className="flex items-center gap-1.5">
+                                {score !== undefined && (
+                                  <span className={`font-bold px-1.5 py-0.2 rounded border ${
+                                    score >= 90 ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "bg-blue-50 text-blue-600 border-blue-100"
+                                  }`}>
+                                    Điểm: {score}%
+                                  </span>
+                                )}
+
+                                {sentence.isMerged && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleUnmergeSentence(sentence, e)}
+                                    className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded text-[9px] font-bold transition-colors cursor-pointer"
+                                    title="Tách lại thành các câu đơn gốc"
+                                  >
+                                    <Scissors size={10} />
+                                    <span>Tách câu</span>
+                                  </button>
+                                )}
+
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleOpenEditSentence(sentence, e)}
+                                  className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors cursor-pointer"
+                                  title="Chỉnh sửa nội dung và mốc thời gian"
+                                >
+                                  <Edit3 size={12} />
+                                </button>
+                              </div>
                             </div>
                           </div>
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -924,6 +1444,20 @@ Ví dụ định dạng đầu ra chuẩn:
         onClose={() => setIsVocabModalOpen(false)}
         defaultWord={vocabDefaultWord}
         contextSentence={vocabContextSentence}
+      />
+
+      {/* Edit Sentence & Timestamps Modal */}
+      <EditSentenceModal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setEditingSentence(null);
+        }}
+        sentence={editingSentence}
+        onSave={handleUpdateSentence}
+        onTestPlay={() => {
+          setPlayTrigger((prev) => prev + 1);
+        }}
       />
     </div>
   );
