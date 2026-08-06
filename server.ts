@@ -173,16 +173,33 @@ app.post("/api/transcript", async (req, res) => {
           const match = regex.exec(trimmed);
           if (match) {
             const timeRange = match[1];
-            const sentenceText = match[2];
+            const rawContent = match[2].trim();
             const timeParts = timeRange.split("-");
+
+            let sentenceText = rawContent;
+            let vietnameseText = "";
+
+            if (rawContent.includes("|")) {
+              const parts = rawContent.split("|");
+              sentenceText = parts[0].trim();
+              vietnameseText = parts.slice(1).join("|").replace(/^Dịch:\s*/i, "").trim();
+            } else if (/\(Dịch:\s*/i.test(rawContent)) {
+              const vMatch = rawContent.match(/^(.*?)\s*\(Dịch:\s*(.*?)\)$/i);
+              if (vMatch) {
+                sentenceText = vMatch[1].trim();
+                vietnameseText = vMatch[2].trim();
+              }
+            }
+
             if (timeParts.length === 2) {
               const start = parseTimestampToSeconds(timeParts[0]);
               const end = parseTimestampToSeconds(timeParts[1]);
               sentences.push({
                 id: id++,
-                sentence: sentenceText.trim(),
+                sentence: sentenceText,
                 start,
-                end
+                end,
+                ...(vietnameseText ? { vietnamese: vietnameseText } : {})
               });
             }
           }
@@ -243,6 +260,10 @@ Hãy phân tích kỹ lưỡng và trả về danh sách các câu đã phân đ
                   sentence: {
                     type: Type.STRING,
                     description: "Câu thoại hoàn chỉnh, viết hoa đầu dòng và có dấu câu phù hợp.",
+                  },
+                  vietnamese: {
+                    type: Type.STRING,
+                    description: "Bản dịch nghĩa tiếng Việt chuẩn xác và tự nhiên của câu.",
                   },
                   start: {
                     type: Type.NUMBER,
@@ -519,6 +540,7 @@ app.post("/api/evaluate", async (req, res) => {
       res.json({
         accuracy: 100,
         feedback: "Xuất sắc! Bạn chép hoàn toàn chính xác.",
+        vietnameseTranslation: req.body.original,
         corrections: [],
       });
       return;
@@ -566,8 +588,9 @@ Câu người học gõ: "${normInput}"
 Đánh giá các yếu tố sau:
 1. "accuracy": Số nguyên từ 0 đến 100 thể hiện mức độ chính xác từ vựng (percentage).
 2. "feedback": Lời nhận xét khích lệ, vui tươi, giàu tính giáo dục bằng tiếng Việt.
-3. "explanation": Nếu người học có lỗi sai, hãy giải thích ngắn gọn trọng tâm bằng tiếng Việt về lý do vì sao câu bị sai (ví dụ về thì của động từ, ngữ pháp, từ loại, hoặc phân biệt từ). Ví dụ: "Just (vừa mới) nói về một hành động đã xảy ra ngay trước thời điểm nói, nên cần dùng quá khứ đơn hoặc hiện tại hoàn thành. Wake là nguyên mẫu/hiện tại không diễn tả được hành động vừa kết thúc."
-4. "corrections": Danh sách các lỗi sai từ vựng cụ thể (KHÔNG bao gồm lỗi về dấu cách). Mỗi lỗi gồm:
+3. "vietnameseTranslation": Bản dịch nghĩa tiếng Việt chuẩn xác, trôi chảy của câu gốc.
+4. "explanation": Nếu người học có lỗi sai, hãy giải thích ngắn gọn trọng tâm bằng tiếng Việt về lý do vì sao câu bị sai (ví dụ về thì của động từ, ngữ pháp, từ loại, hoặc phân biệt từ). Ví dụ: "Just (vừa mới) nói về một hành động đã xảy ra ngay trước thời điểm nói, nên cần dùng quá khứ đơn hoặc hiện tại hoàn thành. Wake là nguyên mẫu/hiện tại không diễn tả được hành động vừa kết thúc."
+5. "corrections": Danh sách các lỗi sai từ vựng cụ thể (KHÔNG bao gồm lỗi về dấu cách). Mỗi lỗi gồm:
    - "word": từ hoặc cụm từ bị viết sai trong bài gõ của người học.
    - "expected": từ hoặc cụm từ chính xác lẽ ra phải viết (theo câu gốc).
    - "type": phân loại lỗi ("missing" - thiếu từ, "spelling" - viết sai chính tả, "incorrect" - viết sai từ).
@@ -582,7 +605,7 @@ Hãy trả về kết quả dưới dạng cấu trúc JSON chính xác tuyệt 
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
-          required: ["accuracy", "feedback", "corrections"],
+          required: ["accuracy", "feedback", "vietnameseTranslation", "corrections"],
           properties: {
             accuracy: {
               type: Type.INTEGER,
@@ -591,6 +614,10 @@ Hãy trả về kết quả dưới dạng cấu trúc JSON chính xác tuyệt 
             feedback: {
               type: Type.STRING,
               description: "Nhận xét vui tươi, thân thiện bằng tiếng Việt.",
+            },
+            vietnameseTranslation: {
+              type: Type.STRING,
+              description: "Bản dịch nghĩa tiếng Việt chuẩn xác của câu gốc.",
             },
             explanation: {
               type: Type.STRING,

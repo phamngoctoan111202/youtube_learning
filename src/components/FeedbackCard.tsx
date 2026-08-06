@@ -1,4 +1,4 @@
-import { CheckCircle2, AlertCircle, RefreshCw, X, HelpCircle, Sparkles } from "lucide-react";
+import { CheckCircle2, AlertCircle, RefreshCw, X, HelpCircle, Sparkles, Languages } from "lucide-react";
 import { EvaluationResult } from "../types";
 import { motion } from "motion/react";
 
@@ -6,9 +6,10 @@ interface FeedbackCardProps {
   result: EvaluationResult | null;
   isEvaluating: boolean;
   onRetry: () => void;
+  currentSentenceTranslation?: string;
 }
 
-export default function FeedbackCard({ result, isEvaluating, onRetry }: FeedbackCardProps) {
+export default function FeedbackCard({ result, isEvaluating, onRetry, currentSentenceTranslation }: FeedbackCardProps) {
   if (isEvaluating) {
     return (
       <div className="bg-white border-2 border-slate-200 rounded-3xl p-8 text-center shadow-sm flex flex-col items-center justify-center min-h-[200px]" id="evaluating-card">
@@ -23,7 +24,8 @@ export default function FeedbackCard({ result, isEvaluating, onRetry }: Feedback
 
   if (!result) return null;
 
-  const { accuracy, feedback, explanation, corrections } = result;
+  const { accuracy, feedback, explanation, vietnameseTranslation, corrections } = result;
+  const translationText = vietnameseTranslation || currentSentenceTranslation;
 
   // Determine feedback style based on accuracy
   const getStyle = () => {
@@ -123,6 +125,21 @@ export default function FeedbackCard({ result, isEvaluating, onRetry }: Feedback
           </div>
         </div>
       </div>
+
+      {/* Vietnamese Translation of the Sentence */}
+      {translationText && (
+        <div className="mb-4 bg-indigo-50/90 border border-indigo-200/80 rounded-2xl p-4 text-xs text-indigo-950 shadow-xs flex items-start gap-3">
+          <Languages size={18} className="text-indigo-600 shrink-0 mt-0.5" />
+          <div className="min-w-0 flex-1">
+            <h5 className="font-bold text-indigo-900 font-display text-xs mb-0.5">
+              Bản dịch nghĩa tiếng Việt:
+            </h5>
+            <p className="leading-relaxed text-indigo-950 font-semibold text-sm">
+              "{translationText}"
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Main AI Pedagogical Explanation */}
       {explanation && (

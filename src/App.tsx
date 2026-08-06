@@ -555,12 +555,12 @@ export default function App() {
 Quy tắc quan trọng:
 1. CHIA NHỎ CÂU: Mỗi phân đoạn CHỈ NÊN DÀI TỪ 3 ĐẾN 8 GIÂY (tối đa 6 - 12 từ). NẾU CÂU QUÁ DÀI hoặc là câu ghép chứa các mệnh đề nối như "where", "and", "but", "so", "because", "when", v.v. -> BẮT BUỘC TÁCH THÀNH CÁC MỆNH ĐỀ NHỎ RIÊNG BIỆT để người học dễ tập viết.
 2. MỐC THỜI GIAN CHÍNH XÁC: Gắn mốc thời gian bắt đầu - kết thúc chính xác cho từng phân đoạn theo định dạng (phút:giây - phút:giây).
-3. KHÔNG DỊCH SANG TIẾNG VIỆT, giữ nguyên tiếng Anh gốc.
+3. DỊCH SANG TIẾNG VIỆT: Kèm theo bản dịch nghĩa tiếng Việt chuẩn xác cho từng phân đoạn (nối sau dấu gạch đứng | hoặc ghi trong ngoặc tròn).
 
 Ví dụ định dạng đầu ra chuẩn:
-(0:10 - 0:18): I just woke up from my dream where you and I had to say goodbye
-(0:18 - 0:23): and I don't know what it all means
-(0:23 - 0:28): but since I survived I realized`;
+(0:10 - 0:18): I just woke up from my dream where you and I had to say goodbye | Dịch: Tôi vừa tỉnh dậy sau giấc mơ nơi bạn và tôi phải nói lời tạm biệt
+(0:18 - 0:23): and I don't know what it all means | Dịch: và tôi không biết tất cả điều này có nghĩa là gì
+(0:23 - 0:28): but since I survived I realized | Dịch: nhưng từ khi tôi sống sót tôi mới nhận ra`;
                             navigator.clipboard.writeText(prompt);
                             setIsCopied(true);
                             setTimeout(() => setIsCopied(false), 2000);
@@ -925,6 +925,7 @@ Ví dụ định dạng đầu ra chuẩn:
                   <FeedbackCard
                     result={evaluationResult}
                     isEvaluating={isEvaluating}
+                    currentSentenceTranslation={sentences[currentIndex]?.vietnamese}
                     onRetry={() => {
                       setEvaluationResult(null);
                       setUserInput("");
@@ -1250,6 +1251,7 @@ Ví dụ định dạng đầu ra chuẩn:
                     <FeedbackCard
                       result={evaluationResult}
                       isEvaluating={isEvaluating}
+                      currentSentenceTranslation={sentences[currentIndex]?.vietnamese}
                       onRetry={() => {
                         setEvaluationResult(null);
                         setUserInput("");

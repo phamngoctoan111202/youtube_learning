@@ -3,6 +3,7 @@ export interface Sentence {
   sentence: string;
   start: number;
   end: number;
+  vietnamese?: string;
   isMerged?: boolean;
   mergedFrom?: Sentence[];
 }
@@ -27,6 +28,7 @@ export interface EvaluationResult {
   accuracy: number;
   feedback: string;
   explanation?: string;
+  vietnameseTranslation?: string;
   corrections: Correction[];
 }
 
