@@ -80,6 +80,10 @@ export default function App() {
   const [editingSentence, setEditingSentence] = useState<Sentence | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
+  // Textarea refs to retain focus
+  const desktopTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const mobileTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
   const handleOpenAddVocab = (word: string = "", contextSentence: string = "") => {
     setVocabDefaultWord(word);
     setVocabContextSentence(contextSentence || (sentences[currentIndex]?.sentence || ""));
@@ -347,6 +351,13 @@ export default function App() {
       alert(err.message || "Lỗi kiểm tra bài gõ.");
     } finally {
       setIsEvaluating(false);
+      setTimeout(() => {
+        if (isMobile) {
+          mobileTextareaRef.current?.focus();
+        } else {
+          desktopTextareaRef.current?.focus();
+        }
+      }, 50);
     }
   };
 
@@ -369,6 +380,34 @@ export default function App() {
     }
   };
 
+  // Global window Enter listener to handle next sentence when evaluation result is displayed
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        const activeElement = document.activeElement;
+        const activeId = activeElement?.id;
+
+        // Ignore if user is inside specific modals or URL inputs
+        if (
+          activeId === "youtube-url-input" ||
+          activeId === "pasted-text-input" ||
+          isVocabModalOpen ||
+          isEditModalOpen
+        ) {
+          return;
+        }
+
+        if (evaluationResult !== null && !isEvaluating) {
+          e.preventDefault();
+          handleNext();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [evaluationResult, isEvaluating, isVocabModalOpen, isEditModalOpen, currentIndex, sentences.length]);
+
   // Navigation handlers
   const handleNext = () => {
     if (currentIndex < sentences.length - 1) {
@@ -377,6 +416,11 @@ export default function App() {
       setEvaluationResult(null);
       setTimeout(() => {
         setPlayTrigger((prev) => prev + 1);
+        if (isMobile) {
+          mobileTextareaRef.current?.focus();
+        } else {
+          desktopTextareaRef.current?.focus();
+        }
       }, 50);
     }
   };
@@ -812,6 +856,7 @@ Ví dụ định dạng đầu ra chuẩn:
                   </div>
 
                   <textarea
+                    ref={mobileTextareaRef}
                     id="dictation-textarea-mobile"
                     placeholder="Nhập câu bạn nghe được... (Enter để nộp/chuyển câu)"
                     value={userInput}
@@ -825,7 +870,7 @@ Ví dụ định dạng đầu ra chuẩn:
                       }, 250);
                     }}
                     onKeyDown={handleInputKeyDown}
-                    disabled={isEvaluating}
+                    readOnly={isEvaluating}
                     rows={2}
                     className="w-full p-2.5 bg-slate-50 border border-slate-300 focus:border-blue-500 focus:bg-white rounded-lg text-slate-800 placeholder-slate-400 outline-none transition-all resize-none text-xs leading-relaxed"
                   />
@@ -1140,12 +1185,13 @@ Ví dụ định dạng đầu ra chuẩn:
                     </div>
 
                     <textarea
+                      ref={desktopTextareaRef}
                       id="dictation-textarea"
                       placeholder="Hãy gõ lại câu bạn nghe được tại đây... (Nhấn Enter để kiểm tra đáp án, Enter phát nữa để sang câu kế tiếp, Shift + Enter để xuống dòng)"
                       value={userInput}
                       onChange={(e) => handleInputChange(e.target.value)}
                       onKeyDown={handleInputKeyDown}
-                      disabled={isEvaluating}
+                      readOnly={isEvaluating}
                       rows={5}
                       className="w-full p-5 bg-slate-50 border-2 border-dashed border-slate-200 focus:border-blue-500 focus:bg-white focus:ring-0 rounded-2xl text-slate-800 placeholder-slate-400 outline-none transition-all resize-none leading-relaxed text-base shadow-inner"
                     />

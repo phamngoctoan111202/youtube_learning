@@ -230,7 +230,7 @@ ${userRawText}
 Hãy phân tích kỹ lưỡng và trả về danh sách các câu đã phân đoạn chính xác theo cấu trúc định dạng JSON.`;
 
         const response = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
+          model: "gemini-2.5-flash",
           contents: prompt,
           config: {
             responseMimeType: "application/json",
@@ -382,7 +382,7 @@ ${JSON.stringify(chunk, null, 2)}
 Hãy phân tích và trả về danh sách các câu hoàn chỉnh chính xác tuyệt đối theo cấu trúc JSON.`;
 
                   const response = await ai.models.generateContent({
-                    model: "gemini-3.5-flash",
+                    model: "gemini-2.5-flash",
                     contents: prompt,
                     config: {
                       responseMimeType: "application/json",
@@ -576,7 +576,7 @@ Câu người học gõ: "${normInput}"
 Hãy trả về kết quả dưới dạng cấu trúc JSON chính xác tuyệt đối.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -664,7 +664,7 @@ Nhiệm vụ:
 Trả về dữ liệu theo đúng cấu trúc JSON.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
