@@ -1,4 +1,4 @@
-import { CheckCircle2, AlertCircle, RefreshCw, X, HelpCircle } from "lucide-react";
+import { CheckCircle2, AlertCircle, RefreshCw, X, HelpCircle, Sparkles } from "lucide-react";
 import { EvaluationResult } from "../types";
 import { motion } from "motion/react";
 
@@ -23,7 +23,7 @@ export default function FeedbackCard({ result, isEvaluating, onRetry }: Feedback
 
   if (!result) return null;
 
-  const { accuracy, feedback, corrections } = result;
+  const { accuracy, feedback, explanation, corrections } = result;
 
   // Determine feedback style based on accuracy
   const getStyle = () => {
@@ -124,6 +124,21 @@ export default function FeedbackCard({ result, isEvaluating, onRetry }: Feedback
         </div>
       </div>
 
+      {/* Main AI Pedagogical Explanation */}
+      {explanation && (
+        <div className="mb-5 bg-white/80 border border-slate-200/80 rounded-2xl p-4 text-xs text-slate-800 shadow-xs flex items-start gap-3">
+          <Sparkles size={16} className="text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <h5 className="font-bold text-slate-900 font-display text-xs mb-1">
+              Giải thích ngắn gọn trọng tâm:
+            </h5>
+            <p className="leading-relaxed text-slate-700 font-medium">
+              {explanation}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Corrections detail */}
       {corrections && corrections.length > 0 ? (
         <div className="mb-5">
@@ -173,6 +188,13 @@ export default function FeedbackCard({ result, isEvaluating, onRetry }: Feedback
                       </p>
                     )}
                   </div>
+
+                  {corr.reason && (
+                    <div className="mt-2 pt-2 border-t border-slate-100 text-xs text-slate-600 font-medium leading-relaxed bg-slate-50 p-2.5 rounded-xl border border-slate-200/50">
+                      <span className="font-bold text-slate-800">💡 Lý do: </span>
+                      {corr.reason}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

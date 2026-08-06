@@ -20,11 +20,13 @@ export interface Correction {
   word: string;
   expected: string;
   type: "missing" | "spelling" | "incorrect";
+  reason?: string;
 }
 
 export interface EvaluationResult {
   accuracy: number;
   feedback: string;
+  explanation?: string;
   corrections: Correction[];
 }
 

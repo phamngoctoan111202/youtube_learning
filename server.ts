@@ -565,11 +565,13 @@ Câu người học gõ: "${normInput}"
 
 Đánh giá các yếu tố sau:
 1. "accuracy": Số nguyên từ 0 đến 100 thể hiện mức độ chính xác từ vựng (percentage).
-2. "feedback": Lời nhận xét khích lệ, vui tươi, giàu tính giáo dục bằng tiếng Việt (ví dụ: "Xuất sắc! Không sai một từ nào!", "Tuyệt vời, bạn chỉ nhầm một chút xíu thôi!", "Tốt rồi, cố gắng nghe kỹ các âm đuôi nhé", "Sai hơi nhiều rồi nè, nghe kỹ lại và viết lại nhé!").
-3. "corrections": Danh sách các lỗi sai từ vựng cụ thể (KHÔNG bao gồm lỗi về dấu cách). Mỗi lỗi gồm:
+2. "feedback": Lời nhận xét khích lệ, vui tươi, giàu tính giáo dục bằng tiếng Việt.
+3. "explanation": Nếu người học có lỗi sai, hãy giải thích ngắn gọn trọng tâm bằng tiếng Việt về lý do vì sao câu bị sai (ví dụ về thì của động từ, ngữ pháp, từ loại, hoặc phân biệt từ). Ví dụ: "Just (vừa mới) nói về một hành động đã xảy ra ngay trước thời điểm nói, nên cần dùng quá khứ đơn hoặc hiện tại hoàn thành. Wake là nguyên mẫu/hiện tại không diễn tả được hành động vừa kết thúc."
+4. "corrections": Danh sách các lỗi sai từ vựng cụ thể (KHÔNG bao gồm lỗi về dấu cách). Mỗi lỗi gồm:
    - "word": từ hoặc cụm từ bị viết sai trong bài gõ của người học.
    - "expected": từ hoặc cụm từ chính xác lẽ ra phải viết (theo câu gốc).
    - "type": phân loại lỗi ("missing" - thiếu từ, "spelling" - viết sai chính tả, "incorrect" - viết sai từ).
+   - "reason": giải thích ngắn gọn lý do vì sao từ/cụm từ này bị sai hoặc nhầm lẫn (ngữ pháp, từ loại, thì động từ).
 
 Hãy trả về kết quả dưới dạng cấu trúc JSON chính xác tuyệt đối.`;
 
@@ -590,6 +592,10 @@ Hãy trả về kết quả dưới dạng cấu trúc JSON chính xác tuyệt 
               type: Type.STRING,
               description: "Nhận xét vui tươi, thân thiện bằng tiếng Việt.",
             },
+            explanation: {
+              type: Type.STRING,
+              description: "Giải thích ngắn gọn trọng tâm bằng tiếng Việt về lý do sai chính của người học.",
+            },
             corrections: {
               type: Type.ARRAY,
               description: "Danh sách chi tiết các lỗi sai để sửa chữa.",
@@ -609,6 +615,10 @@ Hãy trả về kết quả dưới dạng cấu trúc JSON chính xác tuyệt 
                     type: Type.STRING,
                     enum: ["missing", "spelling", "incorrect"],
                     description: "Kiểu lỗi.",
+                  },
+                  reason: {
+                    type: Type.STRING,
+                    description: "Giải thích ngắn gọn vì sao từ này bị sai/nhầm lẫn.",
                   },
                 },
               },

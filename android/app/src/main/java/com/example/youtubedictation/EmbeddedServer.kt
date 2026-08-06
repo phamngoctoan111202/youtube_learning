@@ -391,7 +391,8 @@ Câu người học gõ: "$normInput"
 Đánh giá các yếu tố sau:
 1. "accuracy": Số nguyên từ 0 đến 100 thể hiện mức độ chính xác từ vựng (percentage).
 2. "feedback": Lời nhận xét khích lệ bằng tiếng Việt.
-3. "corrections": Danh sách các lỗi sai từ vựng cụ thể (KHÔNG bao gồm lỗi về dấu cách). Mỗi lỗi gồm: "word" (từ viết sai), "expected" (từ đúng), "type" ("missing"/"spelling"/"incorrect").
+3. "explanation": Nếu người học có lỗi sai, hãy giải thích ngắn gọn trọng tâm bằng tiếng Việt về lý do vì sao câu bị sai (ví dụ về thì của động từ, ngữ pháp, từ loại, hoặc phân biệt từ). Ví dụ: "Just (vừa mới) nói về hành động đã xảy ra nên cần dùng quá khứ đơn 'woke' thay vì hiện tại 'wake'."
+4. "corrections": Danh sách các lỗi sai từ vựng cụ thể (KHÔNG bao gồm lỗi về dấu cách). Mỗi lỗi gồm: "word" (từ viết sai), "expected" (từ đúng), "type" ("missing"/"spelling"/"incorrect"), "reason" (giải thích ngắn gọn lý do vì sao từ này bị sai/nhầm lẫn).
 
 Trả về kết quả dưới dạng JSON."""
 
