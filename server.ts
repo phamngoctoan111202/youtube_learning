@@ -11,8 +11,17 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(express.json());
 
-// Initialize Gemini SDK with custom user agent for tracking
+// Initialize Gemini SDK with single unique log key for debugging connection issues
+const LOG_KEY = "[GEMINI_DEBUG]";
 const apiKey = process.env.GEMINI_API_KEY;
+
+if (!apiKey) {
+  console.warn(`${LOG_KEY} WARNING: GEMINI_API_KEY is NOT set in environment variables (process.env.GEMINI_API_KEY is undefined or empty). Gemini features will be disabled or fall back to local mode.`);
+} else {
+  const maskedKey = apiKey.length > 10 ? `${apiKey.substring(0, 6)}...${apiKey.slice(-4)}` : "***";
+  console.log(`${LOG_KEY} GEMINI_API_KEY detected (Length: ${apiKey.length}, Masked: ${maskedKey}). Initializing GoogleGenAI client.`);
+}
+
 const ai = apiKey
   ? new GoogleGenAI({
       apiKey,
@@ -23,6 +32,68 @@ const ai = apiKey
       },
     })
   : null;
+
+// Diagnostic endpoint to test Gemini API connection with [GEMINI_DEBUG] key
+app.get("/api/test-gemini", async (req, res) => {
+  console.log(`${LOG_KEY} GET /api/test-gemini requested.`);
+
+  if (!apiKey) {
+    console.error(`${LOG_KEY} Test Failed: GEMINI_API_KEY is not defined in process.env.`);
+    res.status(500).json({
+      success: false,
+      logKey: LOG_KEY,
+      error: "GEMINI_API_KEY is not defined in process.env.",
+    });
+    return;
+  }
+
+  if (!ai) {
+    console.error(`${LOG_KEY} Test Failed: GoogleGenAI instance is null.`);
+    res.status(500).json({
+      success: false,
+      logKey: LOG_KEY,
+      error: "GoogleGenAI instance is null.",
+    });
+    return;
+  }
+
+  const maskedKey = apiKey.length > 10 ? `${apiKey.substring(0, 6)}...${apiKey.slice(-4)}` : "***";
+  console.log(`${LOG_KEY} Testing connection with model gemini-2.5-flash using key (${maskedKey})...`);
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: "Hello Gemini! Respond with 'CONNECTION_OK' if you can read this.",
+    });
+
+    const reply = response.text?.trim() || "No text returned";
+    console.log(`${LOG_KEY} Test SUCCESS! Response from Gemini: "${reply}"`);
+
+    res.json({
+      success: true,
+      logKey: LOG_KEY,
+      maskedApiKey: maskedKey,
+      response: reply,
+    });
+  } catch (err: any) {
+    console.error(`${LOG_KEY} Test FAILED! Exception caught:`, {
+      message: err.message,
+      status: err.status,
+      code: err.code,
+      stack: err.stack,
+    });
+
+    res.status(500).json({
+      success: false,
+      logKey: LOG_KEY,
+      maskedApiKey: maskedKey,
+      error: err.message || String(err),
+      status: err.status,
+      code: err.code,
+      details: err.stack,
+    });
+  }
+});
 
 // Utility functions for YouTube processing
 function extractVideoId(url: string): string | null {
@@ -560,6 +631,7 @@ app.post("/api/evaluate", async (req, res) => {
     }
 
     if (!ai) {
+      console.warn(`${LOG_KEY} /api/evaluate fallback triggered: GEMINI_API_KEY is not set.`);
       // Improved fallback comparison
       const oWords = cleanTextForComparison(normOriginal).split(" ").filter(Boolean);
       const iWords = cleanTextForComparison(normInput).split(" ").filter(Boolean);
@@ -588,6 +660,8 @@ app.post("/api/evaluate", async (req, res) => {
       });
       return;
     }
+
+    console.log(`${LOG_KEY} Requesting evaluation from Gemini API (model: gemini-2.5-flash)...`);
 
     const prompt = `So sánh câu đã gõ của người học với câu gốc để đánh giá mức độ chính xác khi luyện nghe chép chính tả.
 
@@ -671,9 +745,15 @@ Hãy trả về kết quả dưới dạng cấu trúc JSON chính xác tuyệt 
 
     const text = response.text;
     if (!text) throw new Error("Empty response from evaluation AI");
+    console.log(`${LOG_KEY} Evaluation response received from Gemini successfully.`);
     res.json(JSON.parse(text));
   } catch (error: any) {
-    console.error("Evaluation API error:", error);
+    console.error(`${LOG_KEY} Evaluation API Error:`, {
+      message: error?.message,
+      status: error?.status,
+      code: error?.code,
+      stack: error?.stack,
+    });
     res.status(500).json({ error: error.message || "Không thể đánh giá kết quả." });
   }
 });
@@ -688,9 +768,12 @@ app.post("/api/vocabulary/lookup-ai", async (req, res) => {
     }
 
     if (!ai) {
+      console.warn(`${LOG_KEY} Vocabulary lookup failed: GEMINI_API_KEY is not set.`);
       res.status(400).json({ error: "Thiếu cấu hình Gemini API Key." });
       return;
     }
+
+    console.log(`${LOG_KEY} Requesting vocabulary lookup for "${word.trim()}" from Gemini API...`);
 
     const prompt = `Bạn là một từ điển Anh - Việt chuyên nghiệp. Hãy phân tích từ vựng tiếng Anh sau và trả về thông tin chi tiết bằng tiếng Việt:
 Từ vựng: "${word.trim()}"
@@ -724,9 +807,15 @@ Trả về dữ liệu theo đúng cấu trúc JSON.`;
 
     const text = response.text;
     if (!text) throw new Error("Gemini returned empty text for lookup");
+    console.log(`${LOG_KEY} Vocabulary lookup successful for "${word.trim()}".`);
     res.json(JSON.parse(text));
   } catch (error: any) {
-    console.error("Vocabulary lookup AI error:", error);
+    console.error(`${LOG_KEY} Vocabulary lookup AI Error:`, {
+      message: error?.message,
+      status: error?.status,
+      code: error?.code,
+      stack: error?.stack,
+    });
     res.status(500).json({ error: error.message || "Không thể tra cứu từ vựng bằng AI." });
   }
 });
