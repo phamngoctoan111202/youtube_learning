@@ -122,6 +122,29 @@ export default function App() {
     );
   };
 
+  const saveSentencesForVideo = (videoId: string | undefined, updatedSentences: Sentence[]) => {
+    if (!videoId || updatedSentences.length === 0) return;
+    try {
+      localStorage.setItem(`sentences_${videoId}`, JSON.stringify(updatedSentences));
+      setHistory((prevHistory) => {
+        const updatedHistory = prevHistory.map((item) => {
+          if (item.videoId === videoId) {
+            return { ...item, sentences: updatedSentences };
+          }
+          return item;
+        });
+        try {
+          localStorage.setItem("youtube_dictation_history", JSON.stringify(updatedHistory));
+        } catch (e) {
+          console.warn("Storage warning updating history", e);
+        }
+        return updatedHistory;
+      });
+    } catch (err) {
+      console.error("Failed to save sentences to localStorage", err);
+    }
+  };
+
   const handleMergeSentences = () => {
     if (selectedSentenceIds.length < 2) return;
     const sortedIds = [...selectedSentenceIds].sort((a, b) => a - b);
@@ -154,6 +177,7 @@ export default function App() {
 
     setSentences(updatedSentences);
     setSelectedSentenceIds([]);
+    saveSentencesForVideo(videoDetails?.videoId, updatedSentences);
 
     const newIndex = updatedSentences.findIndex((s) => s.id === primaryId);
     if (newIndex !== -1) {
@@ -177,15 +201,16 @@ export default function App() {
     ];
 
     setSentences(updatedSentences);
+    saveSentencesForVideo(videoDetails?.videoId, updatedSentences);
     if (currentIndex >= updatedSentences.length) {
       setCurrentIndex(Math.max(0, updatedSentences.length - 1));
     }
   };
 
   const handleUpdateSentence = (updated: Sentence) => {
-    setSentences((prev) =>
-      prev.map((s) => (s.id === updated.id ? updated : s))
-    );
+    const updatedSentences = sentences.map((s) => (s.id === updated.id ? updated : s));
+    setSentences(updatedSentences);
+    saveSentencesForVideo(videoDetails?.videoId, updatedSentences);
     if (sentences[currentIndex]?.id === updated.id) {
       setUserInput("");
       setEvaluationResult(null);
@@ -219,6 +244,42 @@ export default function App() {
     }
     return () => clearInterval(interval);
   }, [isLoading]);
+
+  // Restore active session & custom merged sentences on page load / refresh
+  useEffect(() => {
+    const savedDetailsStr = localStorage.getItem("active_video_details");
+    const savedIndexStr = localStorage.getItem("active_video_current_index");
+    if (savedDetailsStr) {
+      try {
+        const parsedDetails: VideoDetails = JSON.parse(savedDetailsStr);
+        const savedSentencesStr = localStorage.getItem(`sentences_${parsedDetails.videoId}`);
+        if (savedSentencesStr) {
+          const parsedSentences: Sentence[] = JSON.parse(savedSentencesStr);
+          if (Array.isArray(parsedSentences) && parsedSentences.length > 0) {
+            setVideoDetails(parsedDetails);
+            setSentences(parsedSentences);
+            const idx = savedIndexStr ? parseInt(savedIndexStr, 10) : 0;
+            setCurrentIndex(isNaN(idx) ? 0 : Math.min(idx, Math.max(0, parsedSentences.length - 1)));
+          }
+        }
+      } catch (err) {
+        console.error("Failed to restore active video session on refresh", err);
+      }
+    }
+  }, []);
+
+  // Auto-persist active video session & merged sentences to local storage
+  useEffect(() => {
+    if (videoDetails && sentences.length > 0) {
+      try {
+        localStorage.setItem("active_video_details", JSON.stringify(videoDetails));
+        localStorage.setItem("active_video_current_index", String(currentIndex));
+        localStorage.setItem(`sentences_${videoDetails.videoId}`, JSON.stringify(sentences));
+      } catch (e) {
+        console.warn("Storage quota warning on active video sync", e);
+      }
+    }
+  }, [videoDetails, sentences, currentIndex]);
 
   // Load progress and history from LocalStorage
   useEffect(() => {
@@ -273,7 +334,21 @@ export default function App() {
         isRestored: data.isRestored,
       });
 
-      setSentences(data.sentences);
+      // Check if user has saved custom merged/edited sentences for this video
+      const savedSentencesStr = localStorage.getItem(`sentences_${data.videoId}`);
+      let sentencesToUse = data.sentences;
+      if (savedSentencesStr) {
+        try {
+          const parsed = JSON.parse(savedSentencesStr);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            sentencesToUse = parsed;
+          }
+        } catch (e) {
+          console.error("Failed to parse saved custom sentences", e);
+        }
+      }
+
+      setSentences(sentencesToUse);
       setCurrentIndex(0);
 
       // Save to History
