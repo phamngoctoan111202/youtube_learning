@@ -254,6 +254,10 @@ app.post("/api/transcript", async (req, res) => {
               const parts = rawContent.split("|");
               sentenceText = parts[0].trim();
               vietnameseText = parts.slice(1).join("|").replace(/^Dịch:\s*/i, "").trim();
+            } else if (/Dịch:\s*/i.test(rawContent)) {
+              const parts = rawContent.split(/Dịch:\s*/i);
+              sentenceText = parts[0].replace(/[-|:]+$/, "").replace(/\s*\(\s*$/, "").trim();
+              vietnameseText = parts.slice(1).join("Dịch:").replace(/\)$/, "").trim();
             } else if (/\(Dịch:\s*/i.test(rawContent)) {
               const vMatch = rawContent.match(/^(.*?)\s*\(Dịch:\s*(.*?)\)$/i);
               if (vMatch) {
@@ -453,13 +457,17 @@ Hãy phân tích kỹ lưỡng và trả về danh sách các câu đã phân đ
 
               const segmentPromises = chunks.map(async (chunk, chunkIdx) => {
                 try {
-                  const prompt = `Bạn là một chuyên gia ngôn ngữ học và trợ lý nghe chép chính tả xuất sắc. Hãy thực hiện việc phân đoạn câu và sửa lỗi viết hoa, dấu câu cho các phân đoạn phụ đề thô của YouTube dưới đây.
+                  const prompt = `Bạn là một chuyên gia ngôn ngữ học và trợ lý nghe chép chính tả xuất sắc. Hãy thực hiện việc phân đoạn câu, dịch Tiếng Việt và sửa lỗi viết hoa, dấu câu cho các phân đoạn phụ đề thô của YouTube dưới đây.
 
 Quy tắc quan trọng:
 1. CHIA NHỎ CÂU: Mỗi phân đoạn CHỈ NÊN DÀI TỪ 3 ĐẾN 8 GIÂY (tối đa 6 - 12 từ). NẾU CÂU QUÁ DÀI hoặc là câu ghép chứa các mệnh đề nối như "where", "and", "but", "so", "because", "when", v.v. -> BẮT BUỘC TÁCH THÀNH CÁC MỆNH ĐỀ NHỎ RIÊNG BIỆT để người học dễ tập viết.
-2. KHÔNG DỊCH SANG TIẾNG VIỆT, giữ nguyên tiếng Anh gốc (chỉ thêm dấu câu thích hợp và viết hoa chữ cái đầu câu).
-3. KHÔNG ĐƯỢC tự ý thêm bớt hay thay đổi từ ngữ nào trong câu nói để tránh làm mất nghĩa gốc.
-4. MỐC THỜI GIAN CHÍNH XÁC:
+2. DỊCH TIẾNG VIỆT CHUẨN XÁC: Cung cấp bản dịch nghĩa tiếng Việt tự nhiên, trôi chảy cho từng phân đoạn trong trường "vietnamese".
+3. KHÔNG ĐƯỢC tự ý thêm bớt hay thay đổi từ ngữ tiếng Anh gốc trong câu nói.
+4. XỬ LÝ LỜI BÀI HÁT LẶP LẠI (CỰC KỲ QUAN TRỌNG):
+   - Phụ đề có thể chứa các lời bài hát, điệp khúc (chorus) lặp đi lặp lại nhiều lần trong suốt bài hát 3-5 phút (ở mốc 1:46, 2:30, 3:15, 4:00...).
+   - BẮT BUỘC PHẢI PHÂN ĐOẠN VÀ TRẢ VỀ TOÀN BỘ CÁC CÂU TRONG CHUNK NÀY TỪ ĐẦU ĐẾN CUỐI CỦA MỐC THỜI GIAN.
+   - TUYỆT ĐỐI KHÔNG ĐƯỢC BỎ QUA HOẶC CẮT BỚT BẤT KỲ CÂU NÀO DÙ NÓ CÓ TRÙNG LẶP NỘI DUNG VỚI CÁC ĐOẠN TRƯỚC.
+5. MỐC THỜI GIAN CHÍNH XÁC:
    - "start": Thời gian bắt đầu (giây) của phân đoạn thô đầu tiên thuộc mệnh đề này.
    - "end": Thời gian kết thúc (giây) của phân đoạn thô cuối cùng thuộc mệnh đề này (tính bằng start + duration của phân đoạn đó).
 
@@ -488,6 +496,10 @@ Hãy phân tích và trả về danh sách các câu hoàn chỉnh chính xác t
                               type: Type.STRING,
                               description: "Câu hoàn chỉnh, được viết hoa đầu dòng và có dấu câu phù hợp.",
                             },
+                            vietnamese: {
+                              type: Type.STRING,
+                              description: "Bản dịch nghĩa tiếng Việt chuẩn xác và tự nhiên của câu.",
+                            },
                             start: {
                               type: Type.NUMBER,
                               description: "Thời gian bắt đầu câu nói (giây), lấy chính xác từ start của phân đoạn phụ đề thô đầu tiên.",
@@ -504,11 +516,30 @@ Hãy phân tích và trả về danh sách các câu hoàn chỉnh chính xác t
                   });
 
                   const text = response.text;
-                  if (!text) return [];
-                  const parsed = JSON.parse(text);
-                  return Array.isArray(parsed) ? parsed : [];
+                  let parsed: any[] = [];
+                  if (text) {
+                    try {
+                      const rawParsed = JSON.parse(text);
+                      if (Array.isArray(rawParsed) && rawParsed.length > 0) {
+                        parsed = rawParsed;
+                      }
+                    } catch (pErr) {
+                      console.warn(`${LOG_KEY} Chunk ${chunkIdx} JSON parse error:`, pErr);
+                    }
+                  }
+
+                  if (parsed.length === 0) {
+                    console.warn(`${LOG_KEY} Chunk ${chunkIdx} returned empty/invalid response. Falling back to raw chunk mapping for items ${chunkIdx * chunkSize} to ${(chunkIdx + 1) * chunkSize}.`);
+                    return chunk.map((c) => ({
+                      sentence: c.text,
+                      start: c.start,
+                      end: c.start + c.duration,
+                    }));
+                  }
+
+                  return parsed;
                 } catch (err) {
-                  console.error(`Error processing chunk ${chunkIdx}:`, err);
+                  console.error(`${LOG_KEY} Error processing chunk ${chunkIdx}:`, err);
                   // Fallback for this chunk: map individually
                   return chunk.map((c) => ({
                     sentence: c.text,
@@ -530,6 +561,7 @@ Hãy phân tích và trả về danh sách các câu hoàn chỉnh chính xác t
                   sentence: s.sentence.trim(),
                   start: Number(s.start.toFixed(2)),
                   end: Number(s.end.toFixed(2)),
+                  ...(s.vietnamese ? { vietnamese: s.vietnamese.trim() } : {}),
                 }));
 
               res.json({
