@@ -670,13 +670,19 @@ export default function App() {
 
 Quy tắc quan trọng:
 1. CHIA NHỎ CÂU: Mỗi phân đoạn CHỈ NÊN DÀI TỪ 3 ĐẾN 8 GIÂY (tối đa 6 - 12 từ). NẾU CÂU QUÁ DÀI hoặc là câu ghép chứa các mệnh đề nối như "where", "and", "but", "so", "because", "when", v.v. -> BẮT BUỘC TÁCH THÀNH CÁC MỆNH ĐỀ NHỎ RIÊNG BIỆT để người học dễ tập viết.
-2. MỐC THỜI GIAN CHÍNH XÁC: Gắn mốc thời gian bắt đầu - kết thúc chính xác cho từng phân đoạn theo định dạng (phút:giây - phút:giây).
-3. DỊCH SANG TIẾNG VIỆT: Kèm theo bản dịch nghĩa tiếng Việt chuẩn xác cho từng phân đoạn (nối sau dấu gạch đứng | hoặc ghi trong ngoặc tròn).
+2. PHẢI PHỦ TOÀN BỘ THỜI LƯỢNG VIDEO & KHÔNG ĐƯỢC CẮT BỎ ĐOẠN LẶP LẠI:
+   - Xử lý ĐẦY ĐỦ 100% tất cả các lời hát/lời thoại từ đầu (0:00) cho tới CUỐI VIDEO.
+   - TUYỆT ĐỐI KHÔNG ĐƯỢC dừng sớm ở lần lặp 1 hay cắt ngắn bài hát/video (ví dụ: video/bài hát 4 phút KHÔNG được tự ý dừng ở 1:46). BẮT BUỘC phân đoạn đầy đủ tất cả các lần lặp lại của điệp khúc, lời hát, lời thoại kéo dài tới mốc kết thúc thực tế của video.
+   - Chỉ bỏ qua các quãng nghỉ hoàn toàn là nhạc không lời (instrumental breaks) không có lời hát/lời thoại.
+3. MỐC THỜI GIAN CHÍNH XÁC CHUẨN TỪNG MILI GIÂY (KHÔNG ĐƯỢC ĐỂ LÀ .00):
+   - Mốc thời gian BẮT BUỘC có số thực thập phân lẻ đến từng mili giây (ví dụ: 0:10.45 - 0:18.12).
+   - TUYỆT ĐỐI KHÔNG ĐƯỢC làm tròn thành số nguyên hoặc tròn giây .00 (như 0:10.00 hay 0:18.00) để đảm bảo audio phát khớp từng mili giây.
+4. DỊCH SANG TIẾNG VIỆT: Kèm theo bản dịch nghĩa tiếng Việt chuẩn xác cho từng phân đoạn (nối sau dấu gạch đứng | hoặc ghi trong ngoặc tròn).
 
 Ví dụ định dạng đầu ra chuẩn:
-(0:10 - 0:18): I just woke up from my dream where you and I had to say goodbye | Dịch: Tôi vừa tỉnh dậy sau giấc mơ nơi bạn và tôi phải nói lời tạm biệt
-(0:18 - 0:23): and I don't know what it all means | Dịch: và tôi không biết tất cả điều này có nghĩa là gì
-(0:23 - 0:28): but since I survived I realized | Dịch: nhưng từ khi tôi sống sót tôi mới nhận ra`;
+(0:10.45 - 0:18.12): I just woke up from my dream where you and I had to say goodbye | Dịch: Tôi vừa tỉnh dậy sau giấc mơ nơi bạn và tôi phải nói lời tạm biệt
+(0:18.12 - 0:23.50): and I don't know what it all means | Dịch: và tôi không biết tất cả điều này có nghĩa là gì
+(0:23.50 - 0:28.05): but since I survived I realized | Dịch: nhưng từ khi tôi sống sót tôi mới nhận ra`;
                             navigator.clipboard.writeText(prompt);
                             setIsCopied(true);
                             setTimeout(() => setIsCopied(false), 2000);
@@ -694,7 +700,7 @@ Ví dụ định dạng đầu ra chuẩn:
                       <textarea
                         id="pasted-text-input"
                         rows={4}
-                        placeholder="Dán văn bản phụ đề thô ở đây.&#10;&#10;Hỗ trợ nhận dạng tự động:&#10;(0:10 - 0:18): I just woke up from my dream..."
+                        placeholder="Dán văn bản phụ đề thô ở đây.&#10;&#10;Hỗ trợ nhận dạng tự động:&#10;(0:10.45 - 0:18.12): I just woke up from my dream..."
                         value={pastedText}
                         onChange={(e) => setPastedText(e.target.value)}
                         disabled={isLoading}
