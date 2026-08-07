@@ -401,30 +401,30 @@ app.post("/api/transcript", async (req, res) => {
 
         // Optional AI enhancement for plain text without timestamps
         try {
-          const prompt = `Bạn là một chuyên gia ngôn ngữ học tiếng Anh và trợ lý giảng dạy xuất sắc. Dưới đây là phụ đề thô dạng văn bản được người dùng sao chép thủ công.
-Hãy thực hiện việc phân đoạn câu, sửa lỗi viết hoa, dấu câu cho các đoạn phụ đề thô dưới đây.
+          const prompt = `You are an expert English linguist and dictation tutor. Below is raw transcript/subtitle text copied manually by the user.
+Please format, clean, fix capitalization and punctuation, and segment the transcript into short sentences suitable for dictation practice.
 
-Quy tắc quan trọng:
-1. CHIA NHỎ CÂU: Mỗi phân đoạn CHỈ NÊN DÀI TỪ 3 ĐẾN 8 GIÂY (tối đa 6 - 12 từ). NẾU CÂU QUÁ DÀI hoặc là câu ghép chứa các mệnh đề nối như "where", "and", "but", "so", "because", "when", v.v. -> BẮT BUỘC TÁCH THÀNH CÁC MỆNH ĐỀ NHỎ RIÊNG BIỆT để người học dễ tập viết.
-2. PHẢI PHỦ TOÀN BỘ THỜI LƯỢNG VIDEO & KHÔNG ĐƯỢC CẮT BỎ ĐOẠN LẶP LẠI:
-   - NẾU LÀ BÀI HÁT HOẶC VIDEO CÓ CÁC ĐOẠN LẶP LẠI (điệp khúc, điệp từ, verse 2, chorus 2, outro...): TUYỆT ĐỐI KHÔNG ĐƯỢC cắt bỏ hay dừng sớm ở lần lặp 1 (ví dụ: video 4 phút thì KHÔNG được tự ý dừng ở 1:46).
-   - BẮT BUỘC phân đoạn toàn bộ lời hát/lời thoại kéo dài liên tục từ đầu (0:00) cho tới CUỐI VIDEO.
-   - Chỉ bỏ các đoạn hoàn toàn là nhạc không lời (instrumental breaks) không có tiếng hát/tiếng nói.
-3. MỐC THỜI GIAN CHÍNH XÁC CHUẨN TỪNG MILI GIÂY (DECIMAL):
-   - Mốc thời gian "start" và "end" (giây) BẮT BUỘC PHẢI CHUẨN XÁC ĐẾN TỪNG MILI GIÂY (dạng số thực thập phân, ví dụ: 10.45, 14.82, 19.12...), TUYỆT ĐỐI KHÔNG ĐƯỢC làm tròn thành số nguyên hoặc tròn giây .00 (như 10.00 hay 15.00) để audio phát khớp từng mili giây.
-   - Nếu dữ liệu phụ đề thô ĐÃ CÓ SẴN mốc thời gian, hãy trích xuất và BẮT BUỘC SỬ DỤNG CHÍNH XÁC mốc thời gian lẻ tương ứng.
-4. KHÔNG DỊCH SANG TIẾNG VIỆT, giữ nguyên tiếng Anh gốc (chỉ thêm dấu câu thích hợp và viết hoa chữ cái đầu câu).
-5. KHÔNG ĐƯỢC tự ý thêm bớt hay thay đổi từ ngữ nào trong lời thoại gốc để giữ tính chính xác của bài nghe chính tả.
+Important Rules:
+1. SEGMENT SENTENCES: Each segment MUST be 3 to 8 seconds long (max 6 - 12 words). IF A SENTENCE IS TOO LONG or contains compound clauses connected by "where", "and", "but", "so", "because", "when", etc. -> YOU MUST SPLIT THEM INTO SEPARATE SHORT CLAUSES so it is easy for learners to practice listening and typing.
+2. COVER THE ENTIRE VIDEO DURATION & DO NOT TRUNCATE REPEATED SECTIONS:
+   - Process 100% of all lyrics/spoken lines from start (0:00) to the VERY END OF THE VIDEO.
+   - ABSOLUTELY DO NOT stop early at verse 1 / chorus 1 or cut the song/video short (e.g., if a song is 4 minutes long, DO NOT stop at 1:46). YOU MUST segment all repeating choruses, verses, and lines extending to the actual end timestamp of the video.
+   - Only skip purely instrumental breaks without any singing or speech.
+3. PRECISE TIMESTAMPS DETAILED TO MILLISECONDS (DECIMAL):
+   - Timestamps "start" and "end" (in seconds) MUST BE PRECISE TO MILLISECONDS (decimal numbers, e.g., 10.45, 14.82, 19.12...). ABSOLUTELY DO NOT round to whole seconds or ending with .00 (such as 10.00 or 15.00) so audio playback syncs perfectly to milliseconds.
+   - If raw transcript data ALREADY HAS timestamps, extract and PRESERVE the exact decimal timestamps.
+4. KEEP ORIGINAL ENGLISH TEXT: Do not translate sentence to Vietnamese, preserve original English (only add proper punctuation and capitalization). Provide natural Vietnamese translation in the "vietnamese" field.
+5. PRESERVE ORIGINAL WORDS: Do not add, remove, or change any words from the original spoken text.
 
-Ví dụ định dạng phân đoạn chuẩn:
-(0:10.45 - 0:18.12): I just woke up from my dream where you and I had to say goodbye
-(0:18.12 - 0:23.50): and I don't know what it all means
-(0:23.50 - 0:28.05): but since I survived I realized
+Standard Output Format Example:
+(0:10.45 - 0:18.12): I just woke up from my dream where you and I had to say goodbye | Vietnamese: Tôi vừa tỉnh dậy sau giấc mơ nơi bạn và tôi phải nói lời tạm biệt
+(0:18.12 - 0:23.50): and I don't know what it all means | Vietnamese: và tôi không biết tất cả điều này có nghĩa là gì
+(0:23.50 - 0:28.05): but since I survived I realized | Vietnamese: nhưng từ khi tôi sống sót tôi mới nhận ra
 
-Dữ liệu phụ đề thô:
+Raw transcript data:
 ${userRawText}
 
-Hãy phân tích kỹ lưỡng và trả về danh sách các câu đã phân đoạn chính xác theo cấu trúc định dạng JSON.`;
+Analyze carefully and return the list of segmented sentences in JSON format.`;
 
           const response = await ai.models.generateContent({
             model: "gemini-2.0-flash",
@@ -574,30 +574,30 @@ Hãy phân tích kỹ lưỡng và trả về danh sách các câu đã phân đ
 
               const segmentPromises = chunks.map(async (chunk, chunkIdx) => {
                 try {
-                  const prompt = `Bạn là một chuyên gia ngôn ngữ học và trợ lý nghe chép chính tả xuất sắc. Hãy thực hiện việc phân đoạn câu và sửa lỗi viết hoa, dấu câu cho các phân đoạn phụ đề thô của YouTube dưới đây.
+                  const prompt = `You are an expert English linguist and dictation tutor. Please segment, fix capitalization, and add proper punctuation for the raw YouTube subtitle segments below.
 
-Quy tắc quan trọng:
-1. CHIA NHỎ CÂU: Mỗi phân đoạn CHỈ NÊN DÀI TỪ 3 ĐẾN 8 GIÂY (tối đa 6 - 12 từ). NẾU CÂU QUÁ DÀI hoặc là câu ghép chứa các mệnh đề nối như "where", "and", "but", "so", "because", "when", v.v. -> BẮT BUỘC TÁCH THÀNH CÁC MỆNH ĐỀ NHỎ RIÊNG BIỆT để người học dễ tập viết.
-2. PHẢI PHỦ TOÀN BỘ THỜI LƯỢNG VIDEO & KHÔNG ĐƯỢC CẮT BỎ ĐOẠN LẶP LẠI:
-   - Xử lý ĐẦY ĐỦ 100% tất cả các phân đoạn phụ đề được cung cấp trong JSON từ đầu cho đến phân đoạn cuối cùng.
-   - TUYỆT ĐỐI KHÔNG ĐƯỢC dừng sớm ở lần lặp 1 hay cắt ngắn bài hát/video (ví dụ: video/bài hát 4 phút KHÔNG được tự ý dừng ở 1:46). BẮT BUỘC phân đoạn đầy đủ tất cả các lần lặp lại của điệp khúc, lời hát, lời thoại kéo dài tới mốc kết thúc thực tế của video.
-   - Chỉ bỏ qua các quãng nghỉ hoàn toàn là nhạc không lời (instrumental) không có lời hát/lời thoại.
-3. MỐC THỜI GIAN CHÍNH XÁC CHUẨN TỪNG MILI GIÂY (DECIMAL):
-   - "start": Thời gian bắt đầu (giây) tính chính xác đến từng mili giây (dạng số thực thập phân như 10.45, 14.82...) của phân đoạn thô đầu tiên thuộc mệnh đề này.
-   - "end": Thời gian kết thúc (giây) tính chính xác đến từng mili giây (tính bằng start + duration của phân đoạn đó, dạng số thực thập phân như 18.37...).
-   - TUYỆT ĐỐI KHÔNG ĐƯỢC làm tròn thành số nguyên hoặc tròn giây .00 (như 10.00 hay 18.00).
-4. KHÔNG DỊCH SANG TIẾNG VIỆT, giữ nguyên tiếng Anh gốc (chỉ thêm dấu câu thích hợp và viết hoa chữ cái đầu câu).
-5. KHÔNG ĐƯỢC tự ý thêm bớt hay thay đổi từ ngữ nào trong câu nói để tránh làm mất nghĩa gốc.
+Important Rules:
+1. SEGMENT SENTENCES: Each segment MUST be 3 to 8 seconds long (max 6 - 12 words). IF A SENTENCE IS TOO LONG or contains compound clauses connected by "where", "and", "but", "so", "because", "when", etc. -> YOU MUST SPLIT THEM INTO SEPARATE SHORT CLAUSES for dictation practice.
+2. COVER THE ENTIRE VIDEO DURATION & DO NOT TRUNCATE REPEATED SECTIONS:
+   - Process 100% of all subtitle segments provided in JSON from the first to the last segment.
+   - ABSOLUTELY DO NOT stop early at repeat 1 or truncate the song/video (e.g. a 4-minute song MUST NOT stop at 1:46). YOU MUST segment all repeating choruses, verses, and spoken lines up to the actual end timestamp of the video.
+   - Only skip purely instrumental breaks without lyrics or speech.
+3. PRECISE TIMESTAMPS DETAILED TO MILLISECONDS (DECIMAL):
+   - "start": Start time (in seconds) precise to milliseconds (decimal number such as 10.45, 14.82...) of the first raw segment belonging to this clause.
+   - "end": End time (in seconds) precise to milliseconds (calculated as start + duration of the last raw segment, decimal number such as 18.37...).
+   - ABSOLUTELY DO NOT round to whole seconds or ending with .00 (such as 10.00 or 18.00).
+4. KEEP ORIGINAL ENGLISH TEXT: Do not translate sentence to Vietnamese, preserve original English (only add proper punctuation and capitalization).
+5. PRESERVE ORIGINAL WORDS: Do not alter words from the original spoken text.
 
-Ví dụ định dạng phân đoạn chuẩn:
+Standard Output Format Example:
 (0:10.45 - 0:18.12): I just woke up from my dream where you and I had to say goodbye
 (0:18.12 - 0:23.50): and I don't know what it all means
 (0:23.50 - 0:28.05): but since I survived I realized
 
-Dữ liệu phụ đề thô (dưới dạng JSON):
+Raw subtitle data (JSON format):
 ${JSON.stringify(chunk, null, 2)}
 
-Hãy phân tích và trả về danh sách các câu hoàn chỉnh chính xác tuyệt đối theo cấu trúc JSON.`;
+Analyze and return the exact list of segmented sentences in JSON format.`;
 
                   const response = await ai.models.generateContent({
                     model: "gemini-2.0-flash",
@@ -791,28 +791,28 @@ app.post("/api/evaluate", async (req, res) => {
 
     console.log(`${LOG_KEY} Requesting evaluation from Gemini API (model: gemini-2.0-flash)...`);
 
-    const prompt = `So sánh câu đã gõ của người học với câu gốc để đánh giá mức độ chính xác khi luyện nghe chép chính tả.
+    const prompt = `Compare the learner's typed sentence against the target original sentence to evaluate accuracy for English dictation practice.
 
-LƯU Ý QUAN TRỌNG VỀ KHOẢNG TRẮNG VÀ DẤU CÂU:
-- BẮT BUỘC bỏ qua mọi sự khác biệt về khoảng trắng (ví dụ: nhiều dấu cách liền nhau, xuống dòng, khoảng trắng ở đầu/cuối câu, khoảng trắng trước dấu câu). Xem "word1  word2" và "word1 word2" là hoàn toàn GIỐNG NHAU.
-- Bỏ qua các khác biệt nhỏ vô hại về viết hoa hay dấu câu ở cuối câu.
-- KHÔNG tạo lỗi trong "corrections" hoặc trừ điểm vì các dấu cách dư thừa hoặc thiếu dấu cách.
+IMPORTANT NOTES ON WHITESPACE AND PUNCTUATION:
+- MANDATORY: Ignore all differences in whitespace (e.g., multiple consecutive spaces, line breaks, leading/trailing spaces, space before punctuation). Treat "word1  word2" and "word1 word2" as 100% IDENTICAL.
+- Ignore minor harmless capitalization or trailing punctuation differences.
+- DO NOT flag errors in "corrections" or deduct points for extra or missing spaces.
 
-Câu gốc: "${normOriginal}"
-Câu người học gõ: "${normInput}"
+Original Sentence: "${normOriginal}"
+Learner's Input: "${normInput}"
 
-Đánh giá các yếu tố sau:
-1. "accuracy": Số nguyên từ 0 đến 100 thể hiện mức độ chính xác từ vựng (percentage).
-2. "feedback": Lời nhận xét khích lệ, vui tươi, giàu tính giáo dục bằng tiếng Việt.
-3. "vietnameseTranslation": Bản dịch nghĩa tiếng Việt chuẩn xác, trôi chảy của câu gốc.
-4. "explanation": Nếu người học có lỗi sai, hãy giải thích ngắn gọn trọng tâm bằng tiếng Việt về lý do vì sao câu bị sai (ví dụ về thì của động từ, ngữ pháp, từ loại, hoặc phân biệt từ). Ví dụ: "Just (vừa mới) nói về một hành động đã xảy ra ngay trước thời điểm nói, nên cần dùng quá khứ đơn hoặc hiện tại hoàn thành. Wake là nguyên mẫu/hiện tại không diễn tả được hành động vừa kết thúc."
-5. "corrections": Danh sách các lỗi sai từ vựng cụ thể (KHÔNG bao gồm lỗi về dấu cách). Mỗi lỗi gồm:
-   - "word": từ hoặc cụm từ bị viết sai trong bài gõ của người học.
-   - "expected": từ hoặc cụm từ chính xác lẽ ra phải viết (theo câu gốc).
-   - "type": phân loại lỗi ("missing" - thiếu từ, "spelling" - viết sai chính tả, "incorrect" - viết sai từ).
-   - "reason": giải thích ngắn gọn lý do vì sao từ/cụm từ này bị sai hoặc nhầm lẫn (ngữ pháp, từ loại, thì động từ).
+Evaluate the following:
+1. "accuracy": Integer from 0 to 100 representing vocabulary accuracy percentage.
+2. "feedback": Encouraging, cheerful, pedagogical feedback in Vietnamese.
+3. "vietnameseTranslation": Accurate, fluent Vietnamese translation of the original sentence.
+4. "explanation": If the learner made errors, provide a concise explanation in Vietnamese highlighting why the sentence was incorrect (e.g., verb tense, grammar, part of speech, or word distinction).
+5. "corrections": List of specific vocabulary errors (EXCLUDING whitespace/space errors). Each item contains:
+   - "word": incorrect word/phrase typed by learner.
+   - "expected": correct word/phrase from original sentence.
+   - "type": error classification ("missing", "spelling", "incorrect").
+   - "reason": concise explanation in Vietnamese of why this word/phrase is incorrect or mistaken.
 
-Hãy trả về kết quả dưới dạng cấu trúc JSON chính xác tuyệt đối.`;
+Return the evaluation in exact JSON structure.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-2.0-flash",
@@ -923,17 +923,17 @@ app.post("/api/vocabulary/lookup-ai", async (req, res) => {
 
     console.log(`${LOG_KEY} Requesting vocabulary lookup for "${word.trim()}" from Gemini API...`);
 
-    const prompt = `Bạn là một từ điển Anh - Việt chuyên nghiệp. Hãy phân tích từ vựng tiếng Anh sau và trả về thông tin chi tiết bằng tiếng Việt:
-Từ vựng: "${word.trim()}"
-${contextSentence ? `Câu ngữ cảnh: "${contextSentence.trim()}"` : ""}
+    const prompt = `You are a professional English-Vietnamese dictionary. Analyze the following English vocabulary word and return detailed information in Vietnamese:
+Target Word: "${word.trim()}"
+${contextSentence ? `Context Sentence: "${contextSentence.trim()}"` : ""}
 
-Nhiệm vụ:
-1. "vietnamese": Nghĩa tiếng Việt chính xác, phổ biến và ngắn gọn của từ (ví dụ: "sự tồn tại, sự sống sót").
-2. "grammar": Từ loại chính (ví dụ: "noun", "verb", "adjective", "adverb", "phrase").
-3. "englishSentence": Câu ví dụ minh họa bằng tiếng Anh (ưu tiên dùng chính câu ngữ cảnh nếu có, hoặc tạo câu ví dụ tự nhiên ngắn gọn).
-4. "vietnameseSentence": Dịch nghĩa câu ví dụ sang tiếng Việt trôi chảy.
+Task:
+1. "vietnamese": Accurate, concise Vietnamese definition fitting the context.
+2. "grammar": Main part of speech (e.g., "noun", "verb", "adjective", "adverb", "phrase").
+3. "englishSentence": Example sentence in English (prefer using context sentence if provided, or generate a natural short example sentence).
+4. "vietnameseSentence": Fluent Vietnamese translation of the example sentence.
 
-Trả về dữ liệu theo đúng cấu trúc JSON.`;
+Return data in exact JSON format.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-2.0-flash",
