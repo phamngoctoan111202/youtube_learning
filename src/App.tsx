@@ -1090,7 +1090,7 @@ Ví dụ định dạng đầu ra chuẩn:
               <div className="bg-slate-100/60 border border-slate-200/80 rounded-xl p-3 flex gap-2.5 text-[10px] text-slate-500 shadow-xs">
                 <Sparkles size={14} className="text-blue-500 shrink-0 mt-0.5" />
                 <p className="leading-normal font-medium">
-                  Hệ thống phân tích sâu sắc từ loại và lỗi chính tả bằng AI Gemini 2.5 Flash.
+                  Hệ thống phân tích sâu sắc từ loại và lỗi chính tả bằng AI Gemini 2.0 Flash.
                 </p>
               </div>
 
@@ -1450,7 +1450,7 @@ Ví dụ định dạng đầu ra chuẩn:
                 <div className="bg-slate-100/60 border border-slate-200/80 rounded-2xl p-4 flex gap-3 text-xs text-slate-500 shadow-sm">
                   <Sparkles size={16} className="text-blue-500 shrink-0 mt-0.5" />
                   <p className="leading-normal font-medium">
-                    Trình kiểm tra sử dụng công nghệ chấm điểm của <strong>Gemini 2.5 Flash</strong>. Hệ thống phân tích sâu sắc cấu trúc ngữ pháp, từ loại, phân tách các lỗi chính tả vô hại so với lỗi ngữ nghĩa, đem lại lời khuyên thực chất có giá trị sư phạm cao nhất.
+                    Trình kiểm tra sử dụng công nghệ chấm điểm của <strong>Gemini 2.0 Flash</strong>. Hệ thống phân tích sâu sắc cấu trúc ngữ pháp, từ loại, phân tách các lỗi chính tả vô hại so với lỗi ngữ nghĩa, đem lại lời khuyên thực chất có giá trị sư phạm cao nhất.
                   </p>
                 </div>
 

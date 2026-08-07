@@ -58,11 +58,11 @@ app.get("/api/test-gemini", async (req, res) => {
   }
 
   const maskedKey = apiKey.length > 10 ? `${apiKey.substring(0, 6)}...${apiKey.slice(-4)}` : "***";
-  console.log(`${LOG_KEY} Testing connection with model gemini-2.5-flash using key (${maskedKey})...`);
+  console.log(`${LOG_KEY} Testing connection with model gemini-2.0-flash using key (${maskedKey})...`);
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: "Hello Gemini! Respond with 'CONNECTION_OK' if you can read this.",
     });
 
@@ -324,7 +324,7 @@ ${userRawText}
 Hãy phân tích kỹ lưỡng và trả về danh sách các câu đã phân đoạn chính xác theo cấu trúc định dạng JSON.`;
 
         const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
+          model: "gemini-2.0-flash",
           contents: prompt,
           config: {
             responseMimeType: "application/json",
@@ -485,7 +485,7 @@ ${JSON.stringify(chunk, null, 2)}
 Hãy phân tích và trả về danh sách các câu hoàn chỉnh chính xác tuyệt đối theo cấu trúc JSON.`;
 
                   const response = await ai.models.generateContent({
-                    model: "gemini-2.5-flash",
+                    model: "gemini-2.0-flash",
                     contents: prompt,
                     config: {
                       responseMimeType: "application/json",
@@ -623,7 +623,7 @@ app.post("/api/evaluate", async (req, res) => {
       if (!vietnameseTranslation && ai) {
         try {
           const trRes = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-2.0-flash",
             contents: `Translate the following English sentence to natural Vietnamese. Return ONLY the Vietnamese translation text:\n"${normOriginal}"`,
           });
           vietnameseTranslation = trRes.text?.trim() || undefined;
@@ -672,7 +672,7 @@ app.post("/api/evaluate", async (req, res) => {
       return;
     }
 
-    console.log(`${LOG_KEY} Requesting evaluation from Gemini API (model: gemini-2.5-flash)...`);
+    console.log(`${LOG_KEY} Requesting evaluation from Gemini API (model: gemini-2.0-flash)...`);
 
     const prompt = `So sánh câu đã gõ của người học với câu gốc để đánh giá mức độ chính xác khi luyện nghe chép chính tả.
 
@@ -698,7 +698,7 @@ Câu người học gõ: "${normInput}"
 Hãy trả về kết quả dưới dạng cấu trúc JSON chính xác tuyệt đối.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -799,7 +799,7 @@ Nhiệm vụ:
 Trả về dữ liệu theo đúng cấu trúc JSON.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
