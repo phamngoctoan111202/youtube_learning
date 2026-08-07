@@ -319,7 +319,14 @@ export default function App() {
         body: JSON.stringify({ url: targetUrl, html, rawText }),
       });
 
-      const data = await res.json();
+      const resText = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(resText);
+      } catch (e) {
+        console.error("Non-JSON response from /api/transcript:", resText);
+        throw new Error("Máy chủ phản hồi định dạng không hợp lệ. Vui lòng thử lại sau giây lát.");
+      }
 
       if (!res.ok) {
         throw new Error(data.error || "Không thể tải phụ đề của video này.");
@@ -428,7 +435,15 @@ export default function App() {
         }),
       });
 
-      const data = await res.json();
+      const resText = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(resText);
+      } catch (e) {
+        console.error("Non-JSON response from /api/evaluate:", resText);
+        throw new Error("Máy chủ phản hồi định dạng không hợp lệ. Vui lòng thử lại sau giây lát.");
+      }
+
       if (!res.ok) {
         throw new Error(data.error || "Không thể phân tích kết quả.");
       }

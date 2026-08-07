@@ -67,7 +67,15 @@ export default function AddVocabularyModal({
         })
       });
 
-      const data = await res.json();
+      const resText = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(resText);
+      } catch (e) {
+        console.error("Non-JSON response from /api/vocabulary/lookup-ai:", resText);
+        throw new Error("Máy chủ phản hồi định dạng không hợp lệ. Vui lòng thử lại sau giây lát.");
+      }
+
       if (!res.ok) {
         throw new Error(data.error || "Không thể phân tích từ bằng AI.");
       }

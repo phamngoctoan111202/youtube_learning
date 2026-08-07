@@ -13,6 +13,15 @@ app.use(express.json());
 
 // Initialize Gemini SDK with single unique log key for debugging connection issues
 const LOG_KEY = "[GEMINI_DEBUG]";
+
+const safeParseJsonText = (text: string) => {
+  if (!text) throw new Error("Empty text provided for JSON parsing");
+  let cleaned = text.trim();
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  }
+  return JSON.parse(cleaned);
+};
 const apiKey = process.env.GEMINI_API_KEY;
 
 if (!apiKey) {
@@ -460,7 +469,7 @@ Analyze carefully and return the list of segmented sentences in JSON format.`;
 
           const text = response.text;
           if (text) {
-            const parsed = JSON.parse(text);
+            const parsed = safeParseJsonText(text);
             const finalSentences = parsed.map((s: any, idx: number) => ({
               id: idx + 1,
               sentence: s.sentence.trim(),
@@ -627,7 +636,7 @@ Analyze and return the exact list of segmented sentences in JSON format.`;
 
                   const text = response.text;
                   if (!text) return [];
-                  const parsed = JSON.parse(text);
+                  const parsed = safeParseJsonText(text);
                   return Array.isArray(parsed) ? parsed : [];
                 } catch (err) {
                   console.error(`Error processing chunk ${chunkIdx}:`, err);
@@ -870,7 +879,7 @@ Return the evaluation in exact JSON structure.`;
     const text = response.text;
     if (!text) throw new Error("Empty response from evaluation AI");
     console.log(`${LOG_KEY} Evaluation response received from Gemini successfully.`);
-    res.json(JSON.parse(text));
+    res.json(safeParseJsonText(text));
   } catch (error: any) {
     console.warn(`${LOG_KEY} Evaluation API Error (${error?.message}). Falling back to local scoring algorithm...`);
 
@@ -952,7 +961,7 @@ Return data in exact JSON format.`;
     const text = response.text;
     if (!text) throw new Error("Gemini returned empty text for lookup");
     console.log(`${LOG_KEY} Vocabulary lookup successful for "${word.trim()}".`);
-    res.json(JSON.parse(text));
+    res.json(safeParseJsonText(text));
   } catch (error: any) {
     console.error(`${LOG_KEY} Vocabulary lookup AI Error:`, {
       message: error?.message,
