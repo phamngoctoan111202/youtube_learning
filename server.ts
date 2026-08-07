@@ -221,9 +221,12 @@ app.post("/api/transcript", async (req, res) => {
     if (userRawText && userRawText.trim()) {
       console.log("Parsing user-provided raw text transcript locally...");
       
-      const parseTimestampToSeconds = (ts: string): number => {
-        const cleanTs = ts.trim().replace(/[\[\]()]/g, "");
-        const parts = cleanTs.split(":").map(Number);
+      const parseTimestampToSeconds = (tsStr: string): number => {
+        const cleanStr = tsStr.trim().replace(/[sS\[\]()]/g, "").replace(",", ".");
+        if (/^\d+(?:\.\d+)?$/.test(cleanStr)) {
+          return parseFloat(cleanStr);
+        }
+        const parts = cleanStr.split(":").map(Number);
         if (parts.length === 2) {
           return parts[0] * 60 + parts[1];
         } else if (parts.length === 3) {
@@ -237,83 +240,115 @@ app.post("/api/transcript", async (req, res) => {
       let currentTime = 0;
       let idCounter = 1;
 
-      // Regex matching timestamp lines like:
-      // (0:10.45 - 0:18.12): sentence | Dịch: vietnamese
-      // [0:10 - 0:18] sentence
-      const timestampRegex = /^\s*[\(\[]?(\d+:\d+(?:\.\d+)?(?::\d+(?:\.\d+)?)?)\s*(?:-|-->|\to)\s*(\d+:\d+(?:\.\d+)?(?::\d+(?:\.\d+)?)?)[\)\]]?:?\s*(.+)$/i;
+      // Detect timestamp pattern anywhere in a string or standalone line:
+      // Examples:
+      // "(0:10.45 - 0:18.12): sentence | Dịch: vietnamese"
+      // "8.2s - 10.5s (2.3s)"
+      // "00:00:08,200 --> 00:00:10,500"
+      const timestampRangeRegex = /[\(\[]?(\d+(?::\d+)*(?:\.\d+)?\s*s?)\s*(?:-|-->|\to)\s*(\d+(?::\d+)*(?:\.\d+)?\s*s?)(?:\s*\([^)]*\))?[\)\]]?:?/i;
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
+      let pendingTimestamp: { start: number; end: number } | null = null;
+      let pendingText: string = "";
 
-        const match = timestampRegex.exec(trimmed);
+      const flushPending = () => {
+        if (!pendingText.trim()) return;
+
+        let sentenceText = pendingText.trim();
+        let vietnameseText = "";
+
+        if (sentenceText.includes("|")) {
+          const parts = sentenceText.split("|");
+          sentenceText = parts[0].trim();
+          vietnameseText = parts.slice(1).join("|").replace(/^Dịch:\s*/i, "").trim();
+        } else if (/\(Dịch:\s*/i.test(sentenceText)) {
+          const vMatch = sentenceText.match(/^(.*?)\s*\(Dịch:\s*(.*?)\)$/i);
+          if (vMatch) {
+            sentenceText = vMatch[1].trim();
+            vietnameseText = vMatch[2].trim();
+          }
+        }
+
+        if (sentenceText) {
+          let startSec = currentTime;
+          let endSec = currentTime + 4;
+
+          if (pendingTimestamp) {
+            startSec = pendingTimestamp.start;
+            endSec = pendingTimestamp.end;
+            currentTime = endSec;
+          } else {
+            const wordCount = sentenceText.split(/\s+/).length;
+            const estimatedDuration = Math.max(3, Math.min(8, Math.round(wordCount * 0.4)));
+            startSec = currentTime;
+            endSec = currentTime + estimatedDuration;
+            currentTime = endSec;
+          }
+
+          localSentences.push({
+            id: idCounter++,
+            sentence: sentenceText,
+            start: Number(startSec.toFixed(2)),
+            end: Number(endSec.toFixed(2)),
+            ...(vietnameseText ? { vietnamese: vietnameseText } : {}),
+          });
+        }
+
+        pendingTimestamp = null;
+        pendingText = "";
+      };
+
+      for (let idx = 0; idx < lines.length; idx++) {
+        const line = lines[idx].trim();
+        if (!line) continue;
+
+        // Skip standalone index lines like "1", "2", "3" if followed by timestamps or text
+        if (/^\d+$/.test(line) && idx + 1 < lines.length) {
+          const nextLine = lines[idx + 1].trim();
+          if (timestampRangeRegex.test(nextLine) || nextLine.length > 0) {
+            continue;
+          }
+        }
+
+        const match = timestampRangeRegex.exec(line);
         if (match) {
           const startSec = parseTimestampToSeconds(match[1]);
           const endSec = parseTimestampToSeconds(match[2]);
-          const rawContent = match[3].trim();
+          const remainingContent = line.replace(match[0], "").trim();
 
-          let sentenceText = rawContent;
-          let vietnameseText = "";
-
-          if (rawContent.includes("|")) {
-            const parts = rawContent.split("|");
-            sentenceText = parts[0].trim();
-            vietnameseText = parts.slice(1).join("|").replace(/^Dịch:\s*/i, "").trim();
-          } else if (/\(Dịch:\s*/i.test(rawContent)) {
-            const vMatch = rawContent.match(/^(.*?)\s*\(Dịch:\s*(.*?)\)$/i);
-            if (vMatch) {
-              sentenceText = vMatch[1].trim();
-              vietnameseText = vMatch[2].trim();
+          if (remainingContent) {
+            // Line has BOTH timestamp and text!
+            flushPending();
+            pendingTimestamp = { start: startSec, end: endSec };
+            pendingText = remainingContent;
+            flushPending();
+          } else {
+            // Standalone timestamp line! (e.g. "8.2s - 10.5s (2.3s)")
+            if (pendingText) {
+              // Text was on the line ABOVE the timestamp!
+              pendingTimestamp = { start: startSec, end: endSec };
+              flushPending();
+            } else {
+              // Timestamp is BEFORE the upcoming text line!
+              pendingTimestamp = { start: startSec, end: endSec };
             }
-          }
-
-          if (sentenceText) {
-            localSentences.push({
-              id: idCounter++,
-              sentence: sentenceText,
-              start: Number(startSec.toFixed(2)),
-              end: Number(endSec.toFixed(2)),
-              ...(vietnameseText ? { vietnamese: vietnameseText } : {}),
-            });
-            currentTime = endSec;
           }
         } else {
-          // Plain text line without explicit timestamp
-          let sentenceText = trimmed;
-          let vietnameseText = "";
-
-          if (trimmed.includes("|")) {
-            const parts = trimmed.split("|");
-            sentenceText = parts[0].trim();
-            vietnameseText = parts.slice(1).join("|").replace(/^Dịch:\s*/i, "").trim();
-          } else if (/\(Dịch:\s*/i.test(trimmed)) {
-            const vMatch = trimmed.match(/^(.*?)\s*\(Dịch:\s*(.*?)\)$/i);
-            if (vMatch) {
-              sentenceText = vMatch[1].trim();
-              vietnameseText = vMatch[2].trim();
-            }
+          // Line is text!
+          if (pendingText) {
+            pendingText += " " + line;
+          } else {
+            pendingText = line;
           }
-
-          if (sentenceText) {
-            const wordCount = sentenceText.split(/\s+/).length;
-            const estimatedDuration = Math.max(3, Math.min(8, Math.round(wordCount * 0.4)));
-            const startSec = currentTime;
-            const endSec = currentTime + estimatedDuration;
-
-            localSentences.push({
-              id: idCounter++,
-              sentence: sentenceText,
-              start: Number(startSec.toFixed(2)),
-              end: Number(endSec.toFixed(2)),
-              ...(vietnameseText ? { vietnamese: vietnameseText } : {}),
-            });
-            currentTime = endSec;
+          // If we already had a timestamp waiting, flush immediately!
+          if (pendingTimestamp) {
+            flushPending();
           }
         }
       }
+      flushPending();
 
       if (localSentences.length > 0) {
-        const hasTimestamps = /^\s*[\(\[]?\d+:\d+/m.test(userRawText);
+        const hasTimestamps = /[\(\[]?(\d+(?::\d+)*(?:\.\d+)?\s*s?)\s*(?:-|-->|\to)\s*(\d+(?::\d+)*(?:\.\d+)?\s*s?)/i.test(userRawText);
 
         // If text already has timestamps OR if Gemini AI is disabled, return local sentences immediately
         if (hasTimestamps || !ai) {
@@ -345,7 +380,7 @@ Quy tắc quan trọng:
    - Chỉ bỏ các đoạn hoàn toàn là nhạc không lời (instrumental breaks) không có tiếng hát/tiếng nói.
 3. MỐC THỜI GIAN CHÍNH XÁC CHUẨN TỪNG MILI GIÂY (DECIMAL):
    - Mốc thời gian "start" và "end" (giây) BẮT BUỘC PHẢI CHUẨN XÁC ĐẾN TỪNG MILI GIÂY (dạng số thực thập phân, ví dụ: 10.45, 14.82, 19.12...), TUYỆT ĐỐI KHÔNG ĐƯỢC làm tròn thành số nguyên hoặc tròn giây .00 (như 10.00 hay 15.00) để audio phát khớp từng mili giây.
-   - Nếu dữ liệu phụ đề thô ĐÃ CÓ SẴN mốc thời gian, hãy trích xuất và BẮT BUỘC SỬ DỤNG CHÍNH XÁC mốc thời gian lẻ tương ứng.
+   - Nếu dữ liệu phụ đề thô ĐÃ CÓ SẴN mốc thời gian (ví dụ: "8.2s - 10.5s"), bạn BẮT BUỘC PHẢI GIỮ NGUYÊN mốc start = 8.2 và end = 10.5, TUYỆT ĐỐI KHÔNG ĐƯỢC tự ý kéo dài hay thay đổi mốc thời gian này.
 4. KHÔNG DỊCH SANG TIẾNG VIỆT, giữ nguyên tiếng Anh gốc (chỉ thêm dấu câu thích hợp và viết hoa chữ cái đầu câu).
 5. KHÔNG ĐƯỢC tự ý thêm bớt hay thay đổi từ ngữ nào trong lời thoại gốc để giữ tính chính xác của bài nghe chính tả.
 
