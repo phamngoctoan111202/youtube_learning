@@ -254,10 +254,6 @@ app.post("/api/transcript", async (req, res) => {
               const parts = rawContent.split("|");
               sentenceText = parts[0].trim();
               vietnameseText = parts.slice(1).join("|").replace(/^Dịch:\s*/i, "").trim();
-            } else if (/Dịch:\s*/i.test(rawContent)) {
-              const parts = rawContent.split(/Dịch:\s*/i);
-              sentenceText = parts[0].replace(/[-|:]+$/, "").replace(/\s*\(\s*$/, "").trim();
-              vietnameseText = parts.slice(1).join("Dịch:").replace(/\)$/, "").trim();
             } else if (/\(Dịch:\s*/i.test(rawContent)) {
               const vMatch = rawContent.match(/^(.*?)\s*\(Dịch:\s*(.*?)\)$/i);
               if (vMatch) {
@@ -307,14 +303,20 @@ Hãy thực hiện việc phân đoạn câu, sửa lỗi viết hoa, dấu câu
 
 Quy tắc quan trọng:
 1. CHIA NHỎ CÂU: Mỗi phân đoạn CHỈ NÊN DÀI TỪ 3 ĐẾN 8 GIÂY (tối đa 6 - 12 từ). NẾU CÂU QUÁ DÀI hoặc là câu ghép chứa các mệnh đề nối như "where", "and", "but", "so", "because", "when", v.v. -> BẮT BUỘC TÁCH THÀNH CÁC MỆNH ĐỀ NHỎ RIÊNG BIỆT để người học dễ tập viết.
-2. MỐC THỜI GIAN CHÍNH XÁC: Nếu dữ liệu phụ đề thô ĐÃ CÓ SẴN các mốc thời gian (ví dụ: "(0:10 - 0:18)" hoặc "0.0s - 5.5s"), hãy trích xuất và BẮT BUỘC SỬ DỤNG CHÍNH XÁC mốc thời gian tương ứng cho mệnh đề đã tách đó. CHỈ KHI văn bản KHÔNG có mốc thời gian, bạn mới tự ước lượng mốc thời gian tăng dần liên tục và hợp lý.
-3. KHÔNG DỊCH SANG TIẾNG VIỆT, giữ nguyên tiếng Anh gốc (chỉ thêm dấu câu thích hợp và viết hoa chữ cái đầu câu).
-4. KHÔNG ĐƯỢC tự ý thêm bớt hay thay đổi từ ngữ nào trong lời thoại gốc để giữ tính chính xác của bài nghe chính tả.
+2. PHẢI PHỦ TOÀN BỘ THỜI LƯỢNG VIDEO & KHÔNG ĐƯỢC CẮT BỎ ĐOẠN LẶP LẠI:
+   - NẾU LÀ BÀI HÁT HOẶC VIDEO CÓ CÁC ĐOẠN LẶP LẠI (điệp khúc, điệp từ, verse 2, chorus 2, outro...): TUYỆT ĐỐI KHÔNG ĐƯỢC cắt bỏ hay dừng sớm ở lần lặp 1 (ví dụ: video 4 phút thì KHÔNG được tự ý dừng ở 1:46).
+   - BẮT BUỘC phân đoạn toàn bộ lời hát/lời thoại kéo dài liên tục từ đầu (0:00) cho tới CUỐI VIDEO.
+   - Chỉ bỏ các đoạn hoàn toàn là nhạc không lời (instrumental breaks) không có tiếng hát/tiếng nói.
+3. MỐC THỜI GIAN CHÍNH XÁC CHUẨN TỪNG MILI GIÂY (DECIMAL):
+   - Mốc thời gian "start" và "end" (giây) BẮT BUỘC PHẢI CHUẨN XÁC ĐẾN TỪNG MILI GIÂY (dạng số thực thập phân, ví dụ: 10.45, 14.82, 19.12...), TUYỆT ĐỐI KHÔNG ĐƯỢC làm tròn thành số nguyên hoặc tròn giây .00 (như 10.00 hay 15.00) để audio phát khớp từng mili giây.
+   - Nếu dữ liệu phụ đề thô ĐÃ CÓ SẴN mốc thời gian, hãy trích xuất và BẮT BUỘC SỬ DỤNG CHÍNH XÁC mốc thời gian lẻ tương ứng.
+4. KHÔNG DỊCH SANG TIẾNG VIỆT, giữ nguyên tiếng Anh gốc (chỉ thêm dấu câu thích hợp và viết hoa chữ cái đầu câu).
+5. KHÔNG ĐƯỢC tự ý thêm bớt hay thay đổi từ ngữ nào trong lời thoại gốc để giữ tính chính xác của bài nghe chính tả.
 
 Ví dụ định dạng phân đoạn chuẩn:
-(0:10 - 0:18): I just woke up from my dream where you and I had to say goodbye
-(0:18 - 0:23): and I don't know what it all means
-(0:23 - 0:28): but since I survived I realized
+(0:10.45 - 0:18.12): I just woke up from my dream where you and I had to say goodbye
+(0:18.12 - 0:23.50): and I don't know what it all means
+(0:23.50 - 0:28.05): but since I survived I realized
 
 Dữ liệu phụ đề thô:
 ${userRawText}
@@ -457,24 +459,25 @@ Hãy phân tích kỹ lưỡng và trả về danh sách các câu đã phân đ
 
               const segmentPromises = chunks.map(async (chunk, chunkIdx) => {
                 try {
-                  const prompt = `Bạn là một chuyên gia ngôn ngữ học và trợ lý nghe chép chính tả xuất sắc. Hãy thực hiện việc phân đoạn câu, dịch Tiếng Việt và sửa lỗi viết hoa, dấu câu cho các phân đoạn phụ đề thô của YouTube dưới đây.
+                  const prompt = `Bạn là một chuyên gia ngôn ngữ học và trợ lý nghe chép chính tả xuất sắc. Hãy thực hiện việc phân đoạn câu và sửa lỗi viết hoa, dấu câu cho các phân đoạn phụ đề thô của YouTube dưới đây.
 
 Quy tắc quan trọng:
 1. CHIA NHỎ CÂU: Mỗi phân đoạn CHỈ NÊN DÀI TỪ 3 ĐẾN 8 GIÂY (tối đa 6 - 12 từ). NẾU CÂU QUÁ DÀI hoặc là câu ghép chứa các mệnh đề nối như "where", "and", "but", "so", "because", "when", v.v. -> BẮT BUỘC TÁCH THÀNH CÁC MỆNH ĐỀ NHỎ RIÊNG BIỆT để người học dễ tập viết.
-2. DỊCH TIẾNG VIỆT CHUẨN XÁC: Cung cấp bản dịch nghĩa tiếng Việt tự nhiên, trôi chảy cho từng phân đoạn trong trường "vietnamese".
-3. KHÔNG ĐƯỢC tự ý thêm bớt hay thay đổi từ ngữ tiếng Anh gốc trong câu nói.
-4. XỬ LÝ LỜI BÀI HÁT LẶP LẠI (CỰC KỲ QUAN TRỌNG):
-   - Phụ đề có thể chứa các lời bài hát, điệp khúc (chorus) lặp đi lặp lại nhiều lần trong suốt bài hát 3-5 phút (ở mốc 1:46, 2:30, 3:15, 4:00...).
-   - BẮT BUỘC PHẢI PHÂN ĐOẠN VÀ TRẢ VỀ TOÀN BỘ CÁC CÂU TRONG CHUNK NÀY TỪ ĐẦU ĐẾN CUỐI CỦA MỐC THỜI GIAN.
-   - TUYỆT ĐỐI KHÔNG ĐƯỢC BỎ QUA HOẶC CẮT BỚT BẤT KỲ CÂU NÀO DÙ NÓ CÓ TRÙNG LẶP NỘI DUNG VỚI CÁC ĐOẠN TRƯỚC.
-5. MỐC THỜI GIAN CHÍNH XÁC:
-   - "start": Thời gian bắt đầu (giây) của phân đoạn thô đầu tiên thuộc mệnh đề này.
-   - "end": Thời gian kết thúc (giây) của phân đoạn thô cuối cùng thuộc mệnh đề này (tính bằng start + duration của phân đoạn đó).
+2. PHẢI PHỦ TOÀN BỘ THỜI LƯỢNG VIDEO & KHÔNG ĐƯỢC CẮT BỎ ĐOẠN LẶP LẠI:
+   - Xử lý ĐẦY ĐỦ 100% tất cả các phân đoạn phụ đề được cung cấp trong JSON từ đầu cho đến phân đoạn cuối cùng.
+   - TUYỆT ĐỐI KHÔNG ĐƯỢC dừng sớm ở lần lặp 1 hay cắt ngắn bài hát/video (ví dụ: video/bài hát 4 phút KHÔNG được tự ý dừng ở 1:46). BẮT BUỘC phân đoạn đầy đủ tất cả các lần lặp lại của điệp khúc, lời hát, lời thoại kéo dài tới mốc kết thúc thực tế của video.
+   - Chỉ bỏ qua các quãng nghỉ hoàn toàn là nhạc không lời (instrumental) không có lời hát/lời thoại.
+3. MỐC THỜI GIAN CHÍNH XÁC CHUẨN TỪNG MILI GIÂY (DECIMAL):
+   - "start": Thời gian bắt đầu (giây) tính chính xác đến từng mili giây (dạng số thực thập phân như 10.45, 14.82...) của phân đoạn thô đầu tiên thuộc mệnh đề này.
+   - "end": Thời gian kết thúc (giây) tính chính xác đến từng mili giây (tính bằng start + duration của phân đoạn đó, dạng số thực thập phân như 18.37...).
+   - TUYỆT ĐỐI KHÔNG ĐƯỢC làm tròn thành số nguyên hoặc tròn giây .00 (như 10.00 hay 18.00).
+4. KHÔNG DỊCH SANG TIẾNG VIỆT, giữ nguyên tiếng Anh gốc (chỉ thêm dấu câu thích hợp và viết hoa chữ cái đầu câu).
+5. KHÔNG ĐƯỢC tự ý thêm bớt hay thay đổi từ ngữ nào trong câu nói để tránh làm mất nghĩa gốc.
 
 Ví dụ định dạng phân đoạn chuẩn:
-(0:10 - 0:18): I just woke up from my dream where you and I had to say goodbye
-(0:18 - 0:23): and I don't know what it all means
-(0:23 - 0:28): but since I survived I realized
+(0:10.45 - 0:18.12): I just woke up from my dream where you and I had to say goodbye
+(0:18.12 - 0:23.50): and I don't know what it all means
+(0:23.50 - 0:28.05): but since I survived I realized
 
 Dữ liệu phụ đề thô (dưới dạng JSON):
 ${JSON.stringify(chunk, null, 2)}
@@ -496,10 +499,6 @@ Hãy phân tích và trả về danh sách các câu hoàn chỉnh chính xác t
                               type: Type.STRING,
                               description: "Câu hoàn chỉnh, được viết hoa đầu dòng và có dấu câu phù hợp.",
                             },
-                            vietnamese: {
-                              type: Type.STRING,
-                              description: "Bản dịch nghĩa tiếng Việt chuẩn xác và tự nhiên của câu.",
-                            },
                             start: {
                               type: Type.NUMBER,
                               description: "Thời gian bắt đầu câu nói (giây), lấy chính xác từ start của phân đoạn phụ đề thô đầu tiên.",
@@ -516,30 +515,11 @@ Hãy phân tích và trả về danh sách các câu hoàn chỉnh chính xác t
                   });
 
                   const text = response.text;
-                  let parsed: any[] = [];
-                  if (text) {
-                    try {
-                      const rawParsed = JSON.parse(text);
-                      if (Array.isArray(rawParsed) && rawParsed.length > 0) {
-                        parsed = rawParsed;
-                      }
-                    } catch (pErr) {
-                      console.warn(`${LOG_KEY} Chunk ${chunkIdx} JSON parse error:`, pErr);
-                    }
-                  }
-
-                  if (parsed.length === 0) {
-                    console.warn(`${LOG_KEY} Chunk ${chunkIdx} returned empty/invalid response. Falling back to raw chunk mapping for items ${chunkIdx * chunkSize} to ${(chunkIdx + 1) * chunkSize}.`);
-                    return chunk.map((c) => ({
-                      sentence: c.text,
-                      start: c.start,
-                      end: c.start + c.duration,
-                    }));
-                  }
-
-                  return parsed;
+                  if (!text) return [];
+                  const parsed = JSON.parse(text);
+                  return Array.isArray(parsed) ? parsed : [];
                 } catch (err) {
-                  console.error(`${LOG_KEY} Error processing chunk ${chunkIdx}:`, err);
+                  console.error(`Error processing chunk ${chunkIdx}:`, err);
                   // Fallback for this chunk: map individually
                   return chunk.map((c) => ({
                     sentence: c.text,
@@ -561,7 +541,6 @@ Hãy phân tích và trả về danh sách các câu hoàn chỉnh chính xác t
                   sentence: s.sentence.trim(),
                   start: Number(s.start.toFixed(2)),
                   end: Number(s.end.toFixed(2)),
-                  ...(s.vietnamese ? { vietnamese: s.vietnamese.trim() } : {}),
                 }));
 
               res.json({
