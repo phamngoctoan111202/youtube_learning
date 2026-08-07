@@ -74,6 +74,21 @@ export default function FeedbackCard({ result, isEvaluating, onRetry, currentSen
       className={`rounded-3xl p-6 shadow-sm transition-all ${style.bg}`}
       id="feedback-evaluation-card"
     >
+      {/* Vietnamese Translation of the Sentence (placed at top) */}
+      {translationText && (
+        <div className="mb-5 bg-indigo-50/90 border border-indigo-200/80 rounded-2xl p-4 text-xs text-indigo-950 shadow-xs flex items-start gap-3">
+          <Languages size={18} className="text-indigo-600 shrink-0 mt-0.5" />
+          <div className="min-w-0 flex-1">
+            <h5 className="font-bold text-indigo-900 font-display text-xs mb-0.5">
+              Bản dịch nghĩa tiếng Việt:
+            </h5>
+            <p className="leading-relaxed text-indigo-950 font-semibold text-sm">
+              "{translationText}"
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-4 mb-5 border-b border-slate-200/60 pb-5">
         <div className="flex items-center gap-4 text-center md:text-left flex-col md:flex-row">
           <div className="p-3.5 bg-white rounded-2xl shadow-sm border border-slate-100">{style.icon}</div>
@@ -125,21 +140,6 @@ export default function FeedbackCard({ result, isEvaluating, onRetry, currentSen
           </div>
         </div>
       </div>
-
-      {/* Vietnamese Translation of the Sentence */}
-      {translationText && (
-        <div className="mb-4 bg-indigo-50/90 border border-indigo-200/80 rounded-2xl p-4 text-xs text-indigo-950 shadow-xs flex items-start gap-3">
-          <Languages size={18} className="text-indigo-600 shrink-0 mt-0.5" />
-          <div className="min-w-0 flex-1">
-            <h5 className="font-bold text-indigo-900 font-display text-xs mb-0.5">
-              Bản dịch nghĩa tiếng Việt:
-            </h5>
-            <p className="leading-relaxed text-indigo-950 font-semibold text-sm">
-              "{translationText}"
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* Main AI Pedagogical Explanation */}
       {explanation && (

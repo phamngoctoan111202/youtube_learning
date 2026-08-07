@@ -537,10 +537,23 @@ app.post("/api/evaluate", async (req, res) => {
 
     // Fast-track exact match (ignoring whitespace, punctuation & casing)
     if (cleanTextForComparison(normOriginal) === cleanTextForComparison(normInput)) {
+      let vietnameseTranslation = req.body.vietnamese;
+      if (!vietnameseTranslation && ai) {
+        try {
+          const trRes = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: `Translate the following English sentence to natural Vietnamese. Return ONLY the Vietnamese translation text:\n"${normOriginal}"`,
+          });
+          vietnameseTranslation = trRes.text?.trim() || undefined;
+        } catch (err) {
+          // Ignore error
+        }
+      }
+
       res.json({
         accuracy: 100,
         feedback: "Xuất sắc! Bạn chép hoàn toàn chính xác.",
-        vietnameseTranslation: req.body.original,
+        vietnameseTranslation,
         corrections: [],
       });
       return;
@@ -570,6 +583,7 @@ app.post("/api/evaluate", async (req, res) => {
       res.json({
         accuracy: percent,
         feedback,
+        vietnameseTranslation: req.body.vietnamese || undefined,
         corrections: [],
       });
       return;

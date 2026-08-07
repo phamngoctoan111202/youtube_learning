@@ -28,7 +28,8 @@ import {
   Scissors,
   Edit3,
   Square,
-  CheckSquare
+  CheckSquare,
+  Languages
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import Header from "./components/Header";
@@ -45,8 +46,6 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
-
-  // Manual subtitle and tabs states
   const [activeTab, setActiveTab] = useState<"auto" | "html" | "text">("auto");
   const [pastedHtml, setPastedHtml] = useState("");
   const [pastedText, setPastedText] = useState("");
@@ -56,6 +55,30 @@ export default function App() {
   const [videoDetails, setVideoDetails] = useState<VideoDetails | null>(null);
   const [sentences, setSentences] = useState<Sentence[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0); // 0-based index of sentences
+
+  // Settings & Toggles: Show Vietnamese translation before answer & Random Mode
+  const [showTranslationBefore, setShowTranslationBefore] = useState<boolean>(() => {
+    return localStorage.getItem("show_translation_before") === "true";
+  });
+  const [isRandomMode, setIsRandomMode] = useState<boolean>(() => {
+    return localStorage.getItem("is_random_mode") === "true";
+  });
+
+  const toggleShowTranslationBefore = () => {
+    setShowTranslationBefore((prev) => {
+      const val = !prev;
+      localStorage.setItem("show_translation_before", String(val));
+      return val;
+    });
+  };
+
+  const toggleRandomMode = () => {
+    setIsRandomMode((prev) => {
+      const val = !prev;
+      localStorage.setItem("is_random_mode", String(val));
+      return val;
+    });
+  };
 
   // User dictation states
   const [userInput, setUserInput] = useState("");
@@ -326,6 +349,7 @@ export default function App() {
         body: JSON.stringify({
           original: sentences[currentIndex].sentence,
           input: userInput,
+          vietnamese: sentences[currentIndex].vietnamese,
         }),
       });
 
@@ -373,7 +397,9 @@ export default function App() {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if (evaluationResult !== null) {
-        handleNext();
+        if (evaluationResult.accuracy >= 100) {
+          handleNext();
+        }
       } else if (!isEvaluating && userInput.trim()) {
         handleCheck();
       }
@@ -398,18 +424,33 @@ export default function App() {
         }
 
         if (evaluationResult !== null && !isEvaluating) {
-          e.preventDefault();
-          handleNext();
+          if (evaluationResult.accuracy >= 100) {
+            e.preventDefault();
+            handleNext();
+          }
         }
       }
     };
 
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
-  }, [evaluationResult, isEvaluating, isVocabModalOpen, isEditModalOpen, currentIndex, sentences.length]);
+  }, [evaluationResult, isEvaluating, isVocabModalOpen, isEditModalOpen, currentIndex, sentences.length, isRandomMode]);
 
   // Navigation handlers
   const handleNext = () => {
+    if (sentences.length === 0) return;
+
+    if (isRandomMode) {
+      if (sentences.length > 1) {
+        let randIdx = currentIndex;
+        while (randIdx === currentIndex) {
+          randIdx = Math.floor(Math.random() * sentences.length);
+        }
+        handleSelectSentence(randIdx);
+        return;
+      }
+    }
+
     if (currentIndex < sentences.length - 1) {
       setCurrentIndex((prev) => prev + 1);
       setUserInput("");
@@ -804,7 +845,7 @@ Ví dụ định dạng đầu ra chuẩn:
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 flex-wrap justify-end">
                     {/* Padding selector */}
                     <div className="flex gap-0.5 items-center mr-1">
                       <span className="text-[9px] text-slate-400 font-mono">Đệm:</span>
@@ -824,14 +865,34 @@ Ví dụ định dạng đầu ra chuẩn:
                       ))}
                     </div>
 
-                    {/* Randomizer */}
+                    {/* Show Translation Toggle Mobile */}
                     <button
-                      id="play-random-sentence-button-mobile"
-                      onClick={handleRandom}
-                      className="p-1 bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-xs transition-all cursor-pointer"
-                      title="Chọn ngẫu nhiên"
+                      id="toggle-show-translation-button-mobile"
+                      onClick={toggleShowTranslationBefore}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer border ${
+                        showTranslationBefore
+                          ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                          : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
+                      }`}
+                      title={showTranslationBefore ? "Hiện bản dịch trước: BẬT" : "Hiện bản dịch trước: TẮT"}
+                    >
+                      <Languages size={11} />
+                      <span>Dịch TV {showTranslationBefore ? "ON" : "OFF"}</span>
+                    </button>
+
+                    {/* Random Mode Toggle Mobile */}
+                    <button
+                      id="toggle-random-mode-button-mobile"
+                      onClick={toggleRandomMode}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer border ${
+                        isRandomMode
+                          ? "bg-purple-600 text-white border-purple-600 shadow-xs"
+                          : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
+                      }`}
+                      title={isRandomMode ? "Chế độ ngẫu nhiên: BẬT" : "Chế độ ngẫu nhiên: TẮT"}
                     >
                       <Shuffle size={11} />
+                      <span>Ngẫu nhiên {isRandomMode ? "ON" : "OFF"}</span>
                     </button>
 
                     {/* Add Vocabulary Button */}
@@ -845,6 +906,21 @@ Ví dụ định dạng đầu ra chuẩn:
                     </button>
                   </div>
                 </div>
+
+                {/* Optional Preview Translation Before Answering */}
+                {showTranslationBefore && sentences[currentIndex]?.vietnamese && (
+                  <div className="bg-indigo-50/95 border border-indigo-200/90 rounded-lg p-2.5 text-xs text-indigo-950 shadow-xs flex items-start gap-2">
+                    <Languages size={15} className="text-indigo-600 shrink-0 mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <span className="font-bold text-indigo-900 text-[10px] uppercase font-mono tracking-wider block">
+                        Bản dịch Tiếng Việt (Xem trước):
+                      </span>
+                      <p className="font-semibold text-indigo-950 text-xs mt-0.5 leading-snug">
+                        "{sentences[currentIndex].vietnamese}"
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Text Editor */}
                 <div className="flex flex-col gap-1">
@@ -1100,7 +1176,7 @@ Ví dụ định dạng đầu ra chuẩn:
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 flex-wrap">
                       {/* Cushion / Padding configuration */}
                       <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">Độ đệm:</span>
@@ -1123,15 +1199,34 @@ Ví dụ định dạng đầu ra chuẩn:
                         </div>
                       </div>
 
-                      {/* Randomizer */}
+                      {/* Show Vietnamese Translation Toggle */}
                       <button
-                        id="play-random-sentence-button"
-                        onClick={handleRandom}
-                        className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 rounded-xl text-xs font-semibold transition-all shadow-sm active:scale-95"
-                        title="Chọn và nghe ngẫu nhiên một câu trong bài"
+                        id="toggle-show-translation-button"
+                        onClick={toggleShowTranslationBefore}
+                        className={`flex items-center gap-1.5 px-3 py-2 border rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95 ${
+                          showTranslationBefore
+                            ? "bg-emerald-600 text-white border-emerald-600 shadow-emerald-600/20"
+                            : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200"
+                        }`}
+                        title="Xem trước bản dịch tiếng Việt của câu hiện tại trước khi trả lời"
+                      >
+                        <Languages size={14} />
+                        <span>Hiện dịch Tiếng Việt: {showTranslationBefore ? "BẬT" : "TẮT"}</span>
+                      </button>
+
+                      {/* Random Mode Toggle Switch */}
+                      <button
+                        id="toggle-random-mode-button"
+                        onClick={toggleRandomMode}
+                        className={`flex items-center gap-1.5 px-3 py-2 border rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95 ${
+                          isRandomMode
+                            ? "bg-purple-600 text-white border-purple-600 shadow-purple-600/20"
+                            : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200"
+                        }`}
+                        title="Khi BẬT, tự động nhảy sang câu ngẫu nhiên sau khi hoàn thành 100% hoặc bấm Chuyển câu"
                       >
                         <Shuffle size={13} />
-                        <span>Ngẫu nhiên</span>
+                        <span>Chế độ ngẫu nhiên: {isRandomMode ? "BẬT" : "TẮT"}</span>
                       </button>
 
                       {/* Add Vocabulary to Appwrite Button */}
@@ -1171,6 +1266,21 @@ Ví dụ định dạng đầu ra chuẩn:
                         </p>
                         <p className="mt-1 text-indigo-950/80 leading-normal font-medium">
                           Khung hình video ở bên phải được giữ nguyên để bạn theo dõi trực quan và tự điều chỉnh rhythm luyện tập nhé!
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Preview Translation Before Answering */}
+                  {showTranslationBefore && sentences[currentIndex]?.vietnamese && (
+                    <div className="bg-indigo-50/95 border-2 border-indigo-200/90 rounded-2xl p-4 text-xs text-indigo-950 shadow-sm flex items-start gap-3">
+                      <Languages size={18} className="text-indigo-600 shrink-0 mt-0.5" />
+                      <div className="min-w-0 flex-1">
+                        <span className="font-bold text-indigo-900 text-xs uppercase font-mono tracking-wider block mb-0.5">
+                          Bản dịch Tiếng Việt (Chế độ hiện trước):
+                        </span>
+                        <p className="font-semibold text-indigo-950 text-base leading-relaxed">
+                          "{sentences[currentIndex].vietnamese}"
                         </p>
                       </div>
                     </div>
