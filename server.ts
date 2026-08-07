@@ -406,15 +406,13 @@ Please format, clean, fix capitalization and punctuation, and segment the transc
 
 Important Rules:
 1. SEGMENT SENTENCES: Each segment MUST be 3 to 8 seconds long (max 6 - 12 words). IF A SENTENCE IS TOO LONG or contains compound clauses connected by "where", "and", "but", "so", "because", "when", etc. -> YOU MUST SPLIT THEM INTO SEPARATE SHORT CLAUSES so it is easy for learners to practice listening and typing.
-2. COVER THE ENTIRE VIDEO DURATION & DO NOT TRUNCATE REPEATED SECTIONS:
-   - Process 100% of all lyrics/spoken lines from start (0:00) to the VERY END OF THE VIDEO.
-   - ABSOLUTELY DO NOT stop early at verse 1 / chorus 1 or cut the song/video short (e.g., if a song is 4 minutes long, DO NOT stop at 1:46). YOU MUST segment all repeating choruses, verses, and lines extending to the actual end timestamp of the video.
-   - Only skip purely instrumental breaks without any singing or speech.
-3. PRECISE TIMESTAMPS DETAILED TO MILLISECONDS (DECIMAL):
+2. PRECISE INDIVIDUAL TIMESTAMPS (DETAILED TO MILLISECONDS):
+   - Each segment's "start" and "end" timestamps MUST match exactly when the lyrics or spoken words are actually delivered in the audio.
+   - Timestamps do NOT need to be continuous or adjoin back-to-back; natural pauses, gaps, or instrumental breaks between sentences should be preserved.
    - Timestamps "start" and "end" (in seconds) MUST BE PRECISE TO MILLISECONDS (decimal numbers, e.g., 10.45, 14.82, 19.12...). ABSOLUTELY DO NOT round to whole seconds or ending with .00 (such as 10.00 or 15.00) so audio playback syncs perfectly to milliseconds.
    - If raw transcript data ALREADY HAS timestamps, extract and PRESERVE the exact decimal timestamps.
-4. KEEP ORIGINAL ENGLISH TEXT: Do not translate sentence to Vietnamese, preserve original English (only add proper punctuation and capitalization). Provide natural Vietnamese translation in the "vietnamese" field.
-5. PRESERVE ORIGINAL WORDS: Do not add, remove, or change any words from the original spoken text.
+3. KEEP ORIGINAL ENGLISH TEXT: Do not translate sentence to Vietnamese, preserve original English (only add proper punctuation and capitalization). Provide natural Vietnamese translation in the "vietnamese" field.
+4. PRESERVE ORIGINAL WORDS: Do not add, remove, or change any words from the original spoken text.
 
 Standard Output Format Example:
 (0:10.45 - 0:18.12): I just woke up from my dream where you and I had to say goodbye | Vietnamese: Tôi vừa tỉnh dậy sau giấc mơ nơi bạn và tôi phải nói lời tạm biệt
@@ -578,16 +576,14 @@ Analyze carefully and return the list of segmented sentences in JSON format.`;
 
 Important Rules:
 1. SEGMENT SENTENCES: Each segment MUST be 3 to 8 seconds long (max 6 - 12 words). IF A SENTENCE IS TOO LONG or contains compound clauses connected by "where", "and", "but", "so", "because", "when", etc. -> YOU MUST SPLIT THEM INTO SEPARATE SHORT CLAUSES for dictation practice.
-2. COVER THE ENTIRE VIDEO DURATION & DO NOT TRUNCATE REPEATED SECTIONS:
-   - Process 100% of all subtitle segments provided in JSON from the first to the last segment.
-   - ABSOLUTELY DO NOT stop early at repeat 1 or truncate the song/video (e.g. a 4-minute song MUST NOT stop at 1:46). YOU MUST segment all repeating choruses, verses, and spoken lines up to the actual end timestamp of the video.
-   - Only skip purely instrumental breaks without lyrics or speech.
-3. PRECISE TIMESTAMPS DETAILED TO MILLISECONDS (DECIMAL):
+2. PRECISE INDIVIDUAL TIMESTAMPS (DETAILED TO MILLISECONDS):
+   - Each segment's "start" and "end" timestamps MUST match exactly when the lyrics or spoken words are actually delivered in the audio.
+   - Timestamps do NOT need to be continuous or adjoin back-to-back; natural pauses, gaps, or instrumental breaks between sentences should be preserved.
    - "start": Start time (in seconds) precise to milliseconds (decimal number such as 10.45, 14.82...) of the first raw segment belonging to this clause.
    - "end": End time (in seconds) precise to milliseconds (calculated as start + duration of the last raw segment, decimal number such as 18.37...).
    - ABSOLUTELY DO NOT round to whole seconds or ending with .00 (such as 10.00 or 18.00).
-4. KEEP ORIGINAL ENGLISH TEXT: Do not translate sentence to Vietnamese, preserve original English (only add proper punctuation and capitalization).
-5. PRESERVE ORIGINAL WORDS: Do not alter words from the original spoken text.
+3. KEEP ORIGINAL ENGLISH TEXT: Do not translate sentence to Vietnamese, preserve original English (only add proper punctuation and capitalization).
+4. PRESERVE ORIGINAL WORDS: Do not alter words from the original spoken text.
 
 Standard Output Format Example:
 (0:10.45 - 0:18.12): I just woke up from my dream where you and I had to say goodbye
