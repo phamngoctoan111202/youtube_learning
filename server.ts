@@ -217,88 +217,124 @@ app.post("/api/transcript", async (req, res) => {
       console.warn("Failed to fetch oEmbed metadata:", metadataError);
     }
 
-    // A. Handle user-provided RAW TEXT transcript directly if specified
+    // A. Handle user-provided RAW TEXT transcript directly (No Gemini API required)
     if (userRawText && userRawText.trim()) {
-      const isTimestampedFormat = /^\s*\(\d+:\d+(?::\d+)?\s*-\s*\d+:\d+(?::\d+)?\):\s*.+/m.test(userRawText);
+      console.log("Parsing user-provided raw text transcript locally...");
       
-      if (isTimestampedFormat) {
-        console.log("Detected timestamped format in user raw text. Parsing directly...");
-        const lines = userRawText.split('\n');
-        const sentences = [];
-        let id = 1;
-        const regex = /^\s*\(([^)]+)\):\s*(.+)$/;
+      const parseTimestampToSeconds = (ts: string): number => {
+        const cleanTs = ts.trim().replace(/[\[\]()]/g, "");
+        const parts = cleanTs.split(":").map(Number);
+        if (parts.length === 2) {
+          return parts[0] * 60 + parts[1];
+        } else if (parts.length === 3) {
+          return parts[0] * 3600 + parts[1] * 60 + parts[2];
+        }
+        return 0;
+      };
 
-        const parseTimestampToSeconds = (ts: string): number => {
-          const parts = ts.trim().split(":").map(Number);
-          if (parts.length === 2) {
-            return parts[0] * 60 + parts[1];
-          } else if (parts.length === 3) {
-            return parts[0] * 3600 + parts[1] * 60 + parts[2];
+      const lines = userRawText.split(/\r?\n/);
+      const localSentences: Array<{ id: number; sentence: string; start: number; end: number; vietnamese?: string }> = [];
+      let currentTime = 0;
+      let idCounter = 1;
+
+      // Regex matching timestamp lines like:
+      // (0:10.45 - 0:18.12): sentence | Dịch: vietnamese
+      // [0:10 - 0:18] sentence
+      const timestampRegex = /^\s*[\(\[]?(\d+:\d+(?:\.\d+)?(?::\d+(?:\.\d+)?)?)\s*(?:-|-->|\to)\s*(\d+:\d+(?:\.\d+)?(?::\d+(?:\.\d+)?)?)[\)\]]?:?\s*(.+)$/i;
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        const match = timestampRegex.exec(trimmed);
+        if (match) {
+          const startSec = parseTimestampToSeconds(match[1]);
+          const endSec = parseTimestampToSeconds(match[2]);
+          const rawContent = match[3].trim();
+
+          let sentenceText = rawContent;
+          let vietnameseText = "";
+
+          if (rawContent.includes("|")) {
+            const parts = rawContent.split("|");
+            sentenceText = parts[0].trim();
+            vietnameseText = parts.slice(1).join("|").replace(/^Dịch:\s*/i, "").trim();
+          } else if (/\(Dịch:\s*/i.test(rawContent)) {
+            const vMatch = rawContent.match(/^(.*?)\s*\(Dịch:\s*(.*?)\)$/i);
+            if (vMatch) {
+              sentenceText = vMatch[1].trim();
+              vietnameseText = vMatch[2].trim();
+            }
           }
-          return 0;
-        };
 
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-          const match = regex.exec(trimmed);
-          if (match) {
-            const timeRange = match[1];
-            const rawContent = match[2].trim();
-            const timeParts = timeRange.split("-");
+          if (sentenceText) {
+            localSentences.push({
+              id: idCounter++,
+              sentence: sentenceText,
+              start: Number(startSec.toFixed(2)),
+              end: Number(endSec.toFixed(2)),
+              ...(vietnameseText ? { vietnamese: vietnameseText } : {}),
+            });
+            currentTime = endSec;
+          }
+        } else {
+          // Plain text line without explicit timestamp
+          let sentenceText = trimmed;
+          let vietnameseText = "";
 
-            let sentenceText = rawContent;
-            let vietnameseText = "";
-
-            if (rawContent.includes("|")) {
-              const parts = rawContent.split("|");
-              sentenceText = parts[0].trim();
-              vietnameseText = parts.slice(1).join("|").replace(/^Dịch:\s*/i, "").trim();
-            } else if (/\(Dịch:\s*/i.test(rawContent)) {
-              const vMatch = rawContent.match(/^(.*?)\s*\(Dịch:\s*(.*?)\)$/i);
-              if (vMatch) {
-                sentenceText = vMatch[1].trim();
-                vietnameseText = vMatch[2].trim();
-              }
+          if (trimmed.includes("|")) {
+            const parts = trimmed.split("|");
+            sentenceText = parts[0].trim();
+            vietnameseText = parts.slice(1).join("|").replace(/^Dịch:\s*/i, "").trim();
+          } else if (/\(Dịch:\s*/i.test(trimmed)) {
+            const vMatch = trimmed.match(/^(.*?)\s*\(Dịch:\s*(.*?)\)$/i);
+            if (vMatch) {
+              sentenceText = vMatch[1].trim();
+              vietnameseText = vMatch[2].trim();
             }
+          }
 
-            if (timeParts.length === 2) {
-              const start = parseTimestampToSeconds(timeParts[0]);
-              const end = parseTimestampToSeconds(timeParts[1]);
-              sentences.push({
-                id: id++,
-                sentence: sentenceText,
-                start,
-                end,
-                ...(vietnameseText ? { vietnamese: vietnameseText } : {})
-              });
-            }
+          if (sentenceText) {
+            const wordCount = sentenceText.split(/\s+/).length;
+            const estimatedDuration = Math.max(3, Math.min(8, Math.round(wordCount * 0.4)));
+            const startSec = currentTime;
+            const endSec = currentTime + estimatedDuration;
+
+            localSentences.push({
+              id: idCounter++,
+              sentence: sentenceText,
+              start: Number(startSec.toFixed(2)),
+              end: Number(endSec.toFixed(2)),
+              ...(vietnameseText ? { vietnamese: vietnameseText } : {}),
+            });
+            currentTime = endSec;
           }
         }
+      }
 
-        if (sentences.length > 0) {
+      if (localSentences.length > 0) {
+        const hasTimestamps = /^\s*[\(\[]?\d+:\d+/m.test(userRawText);
+
+        // If text already has timestamps OR if Gemini AI is disabled, return local sentences immediately
+        if (hasTimestamps || !ai) {
+          console.log(`Parsed ${localSentences.length} sentences locally without Gemini API.`);
           res.json({
             videoId,
             title: videoTitle,
             author: authorName,
             thumbnailUrl,
             language: "en",
-            sentences: sentences,
+            sentences: localSentences,
             geminiEnhanced: false,
             isRestored: false,
             isManualText: true
           });
           return;
         }
-      }
 
-      if (!ai) {
-        res.status(400).json({ error: "Không thể tự động phân đoạn văn bản phụ đề do thiếu cấu hình Gemini API Key." });
-        return;
-      }
-      console.log("Using user-provided raw text transcript...");
-      try {
-        const prompt = `Bạn là một chuyên gia ngôn ngữ học tiếng Anh và trợ lý giảng dạy xuất sắc. Dưới đây là phụ đề thô dạng văn bản được người dùng sao chép thủ công.
+        // Optional AI enhancement for plain text without timestamps
+        try {
+          const prompt = `Bạn là một chuyên gia ngôn ngữ học tiếng Anh và trợ lý giảng dạy xuất sắc. Dưới đây là phụ đề thô dạng văn bản được người dùng sao chép thủ công.
 Hãy thực hiện việc phân đoạn câu, sửa lỗi viết hoa, dấu câu cho các đoạn phụ đề thô dưới đây.
 
 Quy tắc quan trọng:
@@ -323,68 +359,80 @@ ${userRawText}
 
 Hãy phân tích kỹ lưỡng và trả về danh sách các câu đã phân đoạn chính xác theo cấu trúc định dạng JSON.`;
 
-        const response = await ai.models.generateContent({
-          model: "gemini-2.0-flash",
-          contents: prompt,
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.ARRAY,
-              description: "Danh sách các câu đã được phân đoạn hoàn chỉnh",
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  sentence: {
-                    type: Type.STRING,
-                    description: "Câu thoại hoàn chỉnh, viết hoa đầu dòng và có dấu câu phù hợp.",
+          const response = await ai.models.generateContent({
+            model: "gemini-2.0-flash",
+            contents: prompt,
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.ARRAY,
+                description: "Danh sách các câu đã được phân đoạn hoàn chỉnh",
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    sentence: {
+                      type: Type.STRING,
+                      description: "Câu thoại hoàn chỉnh, viết hoa đầu dòng và có dấu câu phù hợp.",
+                    },
+                    vietnamese: {
+                      type: Type.STRING,
+                      description: "Bản dịch nghĩa tiếng Việt chuẩn xác và tự nhiên của câu.",
+                    },
+                    start: {
+                      type: Type.NUMBER,
+                      description: "Thời gian bắt đầu câu nói (giây), ước lượng tăng dần liên tục.",
+                    },
+                    end: {
+                      type: Type.NUMBER,
+                      description: "Thời gian kết thúc câu nói (giây), bằng thời gian bắt đầu câu tiếp theo.",
+                    },
                   },
-                  vietnamese: {
-                    type: Type.STRING,
-                    description: "Bản dịch nghĩa tiếng Việt chuẩn xác và tự nhiên của câu.",
-                  },
-                  start: {
-                    type: Type.NUMBER,
-                    description: "Thời gian bắt đầu câu nói (giây), ước lượng tăng dần liên tục.",
-                  },
-                  end: {
-                    type: Type.NUMBER,
-                    description: "Thời gian kết thúc câu nói (giây), bằng thời gian bắt đầu câu tiếp theo.",
-                  },
+                  required: ["sentence", "start", "end"],
                 },
-                required: ["sentence", "start", "end"],
               },
             },
-          },
-        });
+          });
 
-        const text = response.text;
-        if (!text) {
-          throw new Error("Gemini returned empty text during raw text processing");
+          const text = response.text;
+          if (text) {
+            const parsed = JSON.parse(text);
+            const finalSentences = parsed.map((s: any, idx: number) => ({
+              id: idx + 1,
+              sentence: s.sentence.trim(),
+              start: Number(Number(s.start).toFixed(2)),
+              end: Number(Number(s.end).toFixed(2)),
+              ...(s.vietnamese ? { vietnamese: s.vietnamese.trim() } : {}),
+            }));
+
+            res.json({
+              videoId,
+              title: videoTitle,
+              author: authorName,
+              thumbnailUrl,
+              language: "en",
+              sentences: finalSentences,
+              geminiEnhanced: true,
+              isRestored: false,
+              isManualText: true
+            });
+            return;
+          }
+        } catch (err: any) {
+          console.warn(`${LOG_KEY} Raw text Gemini processing failed (${err?.message}). Falling back to local parsed sentences.`);
         }
 
-        const parsed = JSON.parse(text);
-        const finalSentences = parsed.map((s: any, idx: number) => ({
-          id: idx + 1,
-          sentence: s.sentence.trim(),
-          start: Number(Number(s.start).toFixed(2)),
-          end: Number(Number(s.end).toFixed(2))
-        }));
-
+        // Return local parsed sentences on Gemini API quota/network failure
         res.json({
           videoId,
           title: videoTitle,
           author: authorName,
           thumbnailUrl,
           language: "en",
-          sentences: finalSentences,
-          geminiEnhanced: true,
+          sentences: localSentences,
+          geminiEnhanced: false,
           isRestored: false,
           isManualText: true
         });
-        return;
-      } catch (err: any) {
-        console.error("Error parsing user raw text:", err);
-        res.status(500).json({ error: `Không thể xử lý phụ đề dạng văn bản của bạn: ${err.message || err}` });
         return;
       }
     }
@@ -759,13 +807,33 @@ Hãy trả về kết quả dưới dạng cấu trúc JSON chính xác tuyệt 
     console.log(`${LOG_KEY} Evaluation response received from Gemini successfully.`);
     res.json(JSON.parse(text));
   } catch (error: any) {
-    console.error(`${LOG_KEY} Evaluation API Error:`, {
-      message: error?.message,
-      status: error?.status,
-      code: error?.code,
-      stack: error?.stack,
+    console.warn(`${LOG_KEY} Evaluation API Error (${error?.message}). Falling back to local scoring algorithm...`);
+
+    const oWords = cleanTextForComparison(normOriginal).split(" ").filter(Boolean);
+    const iWords = cleanTextForComparison(normInput).split(" ").filter(Boolean);
+
+    let matched = 0;
+    const iWordsCopy = [...iWords];
+    for (const w of oWords) {
+      const idx = iWordsCopy.indexOf(w);
+      if (idx !== -1) {
+        matched++;
+        iWordsCopy.splice(idx, 1);
+      }
+    }
+    const percent = oWords.length > 0 ? Math.round((matched / oWords.length) * 100) : 0;
+
+    let feedback = "Cố gắng lên nhé!";
+    if (percent >= 95) feedback = "Xuất sắc! Bạn chép hoàn toàn chính xác.";
+    else if (percent >= 80) feedback = "Rất tốt! Chỉ sai một vài lỗi nhỏ.";
+    else if (percent >= 50) feedback = "Tốt! Cần chú ý kỹ hơn các từ khó.";
+
+    res.json({
+      accuracy: percent,
+      feedback,
+      vietnameseTranslation: req.body.vietnamese || undefined,
+      corrections: [],
     });
-    res.status(500).json({ error: error.message || "Không thể đánh giá kết quả." });
   }
 });
 
