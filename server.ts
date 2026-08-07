@@ -720,13 +720,13 @@ Analyze and return the exact list of segmented sentences in JSON format.`;
   }
 });
 
-// AI Feedback evaluation endpoint
+// Fast Feedback evaluation endpoint (No Gemini API required)
 app.post("/api/evaluate", async (req, res) => {
   try {
     const { original, input } = req.body;
     if (!original) {
-       res.status(400).json({ error: "Thiếu câu gốc" });
-       return;
+      res.status(400).json({ error: "Thiếu câu gốc" });
+      return;
     }
 
     const cleanTextForComparison = (t: string) =>
@@ -738,22 +738,13 @@ app.post("/api/evaluate", async (req, res) => {
 
     const normOriginal = (original || "").replace(/\s+/g, " ").trim();
     const normInput = (input || "").replace(/\s+/g, " ").trim();
+    const cleanOrig = cleanTextForComparison(normOriginal);
+    const cleanUser = cleanTextForComparison(normInput);
+
+    let vietnameseTranslation = req.body.vietnamese;
 
     // Fast-track exact match (ignoring whitespace, punctuation & casing)
-    if (cleanTextForComparison(normOriginal) === cleanTextForComparison(normInput)) {
-      let vietnameseTranslation = req.body.vietnamese;
-      if (!vietnameseTranslation && ai) {
-        try {
-          const trRes = await ai.models.generateContent({
-            model: "gemini-2.0-flash",
-            contents: `Translate the following English sentence to natural Vietnamese. Return ONLY the Vietnamese translation text:\n"${normOriginal}"`,
-          });
-          vietnameseTranslation = trRes.text?.trim() || undefined;
-        } catch (err) {
-          // Ignore error
-        }
-      }
-
+    if (cleanOrig === cleanUser) {
       res.json({
         accuracy: 100,
         feedback: "Xuất sắc! Bạn chép hoàn toàn chính xác.",
@@ -763,128 +754,8 @@ app.post("/api/evaluate", async (req, res) => {
       return;
     }
 
-    if (!ai) {
-      console.warn(`${LOG_KEY} /api/evaluate fallback triggered: GEMINI_API_KEY is not set.`);
-      // Improved fallback comparison
-      const oWords = cleanTextForComparison(normOriginal).split(" ").filter(Boolean);
-      const iWords = cleanTextForComparison(normInput).split(" ").filter(Boolean);
-
-      let matched = 0;
-      const iWordsCopy = [...iWords];
-      for (const w of oWords) {
-        const idx = iWordsCopy.indexOf(w);
-        if (idx !== -1) {
-          matched++;
-          iWordsCopy.splice(idx, 1);
-        }
-      }
-      const percent = oWords.length > 0 ? Math.round((matched / oWords.length) * 100) : 0;
-
-      let feedback = "Cố gắng lên nhé!";
-      if (percent >= 95) feedback = "Xuất sắc! Bạn chép hoàn toàn chính xác.";
-      else if (percent >= 80) feedback = "Rất tốt! Chỉ sai một vài lỗi nhỏ.";
-      else if (percent >= 50) feedback = "Tốt! Cần chú ý kỹ hơn các từ khó.";
-
-      res.json({
-        accuracy: percent,
-        feedback,
-        vietnameseTranslation: req.body.vietnamese || undefined,
-        corrections: [],
-      });
-      return;
-    }
-
-    console.log(`${LOG_KEY} Requesting evaluation from Gemini API (model: gemini-2.0-flash)...`);
-
-    const prompt = `Compare the learner's typed sentence against the target original sentence to evaluate accuracy for English dictation practice.
-
-IMPORTANT NOTES ON WHITESPACE AND PUNCTUATION:
-- MANDATORY: Ignore all differences in whitespace (e.g., multiple consecutive spaces, line breaks, leading/trailing spaces, space before punctuation). Treat "word1  word2" and "word1 word2" as 100% IDENTICAL.
-- Ignore minor harmless capitalization or trailing punctuation differences.
-- DO NOT flag errors in "corrections" or deduct points for extra or missing spaces.
-
-Original Sentence: "${normOriginal}"
-Learner's Input: "${normInput}"
-
-Evaluate the following:
-1. "accuracy": Integer from 0 to 100 representing vocabulary accuracy percentage.
-2. "feedback": Encouraging, cheerful, pedagogical feedback in Vietnamese.
-3. "vietnameseTranslation": Accurate, fluent Vietnamese translation of the original sentence.
-4. "explanation": If the learner made errors, provide a concise explanation in Vietnamese highlighting why the sentence was incorrect (e.g., verb tense, grammar, part of speech, or word distinction).
-5. "corrections": List of specific vocabulary errors (EXCLUDING whitespace/space errors). Each item contains:
-   - "word": incorrect word/phrase typed by learner.
-   - "expected": correct word/phrase from original sentence.
-   - "type": error classification ("missing", "spelling", "incorrect").
-   - "reason": concise explanation in Vietnamese of why this word/phrase is incorrect or mistaken.
-
-Return the evaluation in exact JSON structure.`;
-
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          required: ["accuracy", "feedback", "vietnameseTranslation", "corrections"],
-          properties: {
-            accuracy: {
-              type: Type.INTEGER,
-              description: "Điểm số chính xác từ 0 đến 100.",
-            },
-            feedback: {
-              type: Type.STRING,
-              description: "Nhận xét vui tươi, thân thiện bằng tiếng Việt.",
-            },
-            vietnameseTranslation: {
-              type: Type.STRING,
-              description: "Bản dịch nghĩa tiếng Việt chuẩn xác của câu gốc.",
-            },
-            explanation: {
-              type: Type.STRING,
-              description: "Giải thích ngắn gọn trọng tâm bằng tiếng Việt về lý do sai chính của người học.",
-            },
-            corrections: {
-              type: Type.ARRAY,
-              description: "Danh sách chi tiết các lỗi sai để sửa chữa.",
-              items: {
-                type: Type.OBJECT,
-                required: ["word", "expected", "type"],
-                properties: {
-                  word: {
-                    type: Type.STRING,
-                    description: "Từ hoặc cụm từ viết sai/thiếu của học sinh.",
-                  },
-                  expected: {
-                    type: Type.STRING,
-                    description: "Từ hoặc cụm từ đúng đáng lẽ phải viết.",
-                  },
-                  type: {
-                    type: Type.STRING,
-                    enum: ["missing", "spelling", "incorrect"],
-                    description: "Kiểu lỗi.",
-                  },
-                  reason: {
-                    type: Type.STRING,
-                    description: "Giải thích ngắn gọn vì sao từ này bị sai/nhầm lẫn.",
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-
-    const text = response.text;
-    if (!text) throw new Error("Empty response from evaluation AI");
-    console.log(`${LOG_KEY} Evaluation response received from Gemini successfully.`);
-    res.json(safeParseJsonText(text));
-  } catch (error: any) {
-    console.warn(`${LOG_KEY} Evaluation API Error (${error?.message}). Falling back to local scoring algorithm...`);
-
-    const oWords = cleanTextForComparison(normOriginal).split(" ").filter(Boolean);
-    const iWords = cleanTextForComparison(normInput).split(" ").filter(Boolean);
+    const oWords = cleanOrig.split(" ").filter(Boolean);
+    const iWords = cleanUser.split(" ").filter(Boolean);
 
     let matched = 0;
     const iWordsCopy = [...iWords];
@@ -905,9 +776,11 @@ Return the evaluation in exact JSON structure.`;
     res.json({
       accuracy: percent,
       feedback,
-      vietnameseTranslation: req.body.vietnamese || undefined,
+      vietnameseTranslation,
       corrections: [],
     });
+  } catch (error: any) {
+    res.status(500).json({ error: "Không thể đánh giá kết quả." });
   }
 });
 
