@@ -179,6 +179,53 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", geminiConfigured: !!ai });
 });
 
+function mergeRawSegmentsLocally(rawSegments: Array<{ text: string; start: number; duration: number }>): Array<{ sentence: string; start: number; end: number }> {
+  const result: Array<{ sentence: string; start: number; end: number }> = [];
+  if (!rawSegments || rawSegments.length === 0) return result;
+
+  let currentText = "";
+  let currentStart = rawSegments[0].start;
+  let currentEnd = rawSegments[0].start + rawSegments[0].duration;
+
+  for (let i = 0; i < rawSegments.length; i++) {
+    const seg = rawSegments[i];
+    const text = (seg.text || "").trim();
+    if (!text) continue;
+
+    if (!currentText) {
+      currentText = text;
+      currentStart = seg.start;
+      currentEnd = seg.start + seg.duration;
+    } else {
+      currentText += " " + text;
+      currentEnd = seg.start + seg.duration;
+    }
+
+    const wordCount = currentText.split(/\s+/).length;
+    const duration = currentEnd - currentStart;
+    const endsWithPunctuation = /[.!?]$/.test(currentText);
+
+    if (endsWithPunctuation || duration >= 4.5 || wordCount >= 8 || i === rawSegments.length - 1) {
+      result.push({
+        sentence: currentText.trim(),
+        start: Number(currentStart.toFixed(2)),
+        end: Number(currentEnd.toFixed(2)),
+      });
+      currentText = "";
+    }
+  }
+
+  if (currentText.trim()) {
+    result.push({
+      sentence: currentText.trim(),
+      start: Number(currentStart.toFixed(2)),
+      end: Number(currentEnd.toFixed(2)),
+    });
+  }
+
+  return result;
+}
+
 // Endpoint to fetch video details and segment transcript
 app.post("/api/transcript", async (req, res) => {
   try {
@@ -221,12 +268,9 @@ app.post("/api/transcript", async (req, res) => {
     if (userRawText && userRawText.trim()) {
       console.log("Parsing user-provided raw text transcript locally...");
       
-      const parseTimestampToSeconds = (tsStr: string): number => {
-        const cleanStr = tsStr.trim().replace(/[sS\[\]()]/g, "").replace(",", ".");
-        if (/^\d+(?:\.\d+)?$/.test(cleanStr)) {
-          return parseFloat(cleanStr);
-        }
-        const parts = cleanStr.split(":").map(Number);
+      const parseTimestampToSeconds = (ts: string): number => {
+        const cleanTs = ts.trim().replace(/[\[\]()]/g, "").replace(",", ".");
+        const parts = cleanTs.split(":").map(Number);
         if (parts.length === 2) {
           return parts[0] * 60 + parts[1];
         } else if (parts.length === 3) {
@@ -239,29 +283,78 @@ app.post("/api/transcript", async (req, res) => {
       const localSentences: Array<{ id: number; sentence: string; start: number; end: number; vietnamese?: string }> = [];
       let currentTime = 0;
       let idCounter = 1;
+      let pendingStart: number | null = null;
 
-      // Detect timestamp pattern anywhere in a string or standalone line:
-      // Examples:
-      // "(0:10.45 - 0:18.12): sentence | Dịch: vietnamese"
-      // "8.2s - 10.5s (2.3s)"
-      // "00:00:08,200 --> 00:00:10,500"
-      const timestampRangeRegex = /[\(\[]?(\d+(?::\d+)*(?:\.\d+)?\s*s?)\s*(?:-|-->|\to)\s*(\d+(?::\d+)*(?:\.\d+)?\s*s?)(?:\s*\([^)]*\))?[\)\]]?:?/i;
+      // Regex matching timestamp range lines like:
+      // (0:08.52 - 0:13.25): sentence | Dịch: vietnamese
+      // 00:00:08,520 --> 00:00:13,250 sentence
+      const timestampRangeRegex = /^\s*[\(\[]?(\d+:\d+(?:[.,]\d+)?(?::\d+(?:[.,]\d+)?)?)\s*(?:-|-->|\to)\s*(\d+:\d+(?:[.,]\d+)?(?::\d+(?:[.,]\d+)?)?)[\)\]]?:?\s*(.*)$/i;
 
-      let pendingTimestamp: { start: number; end: number } | null = null;
-      let pendingText: string = "";
+      // Single timestamp line like: "0:08.52" or "0:08"
+      const singleTimestampRegex = /^\s*[\(\[]?(\d+:\d+(?:[.,]\d+)?(?::\d+(?:[.,]\d+)?)?)[\)\]]?\s*$/;
 
-      const flushPending = () => {
-        if (!pendingText.trim()) return;
+      for (let i = 0; i < lines.length; i++) {
+        const trimmed = lines[i].trim();
+        if (!trimmed) continue;
 
-        let sentenceText = pendingText.trim();
+        // Ignore standalone index numbers (e.g. "1", "2" from SRT subtitle blocks)
+        if (/^\d+$/.test(trimmed) && trimmed.length < 5) {
+          continue;
+        }
+
+        // Check single timestamp line
+        const singleMatch = singleTimestampRegex.exec(trimmed);
+        if (singleMatch) {
+          pendingStart = parseTimestampToSeconds(singleMatch[1]);
+          continue;
+        }
+
+        // Check timestamp range line
+        const rangeMatch = timestampRangeRegex.exec(trimmed);
+        if (rangeMatch) {
+          const startSec = parseTimestampToSeconds(rangeMatch[1]);
+          const endSec = parseTimestampToSeconds(rangeMatch[2]);
+          const rawContent = rangeMatch[3].trim();
+
+          let sentenceText = rawContent;
+          let vietnameseText = "";
+
+          if (rawContent.includes("|")) {
+            const parts = rawContent.split("|");
+            sentenceText = parts[0].trim();
+            vietnameseText = parts.slice(1).join("|").replace(/^Dịch:\s*/i, "").trim();
+          } else if (/\(Dịch:\s*/i.test(rawContent)) {
+            const vMatch = rawContent.match(/^(.*?)\s*\(Dịch:\s*(.*?)\)$/i);
+            if (vMatch) {
+              sentenceText = vMatch[1].trim();
+              vietnameseText = vMatch[2].trim();
+            }
+          }
+
+          if (sentenceText) {
+            localSentences.push({
+              id: idCounter++,
+              sentence: sentenceText,
+              start: Number(startSec.toFixed(2)),
+              end: Number(endSec.toFixed(2)),
+              ...(vietnameseText ? { vietnamese: vietnameseText } : {}),
+            });
+            currentTime = endSec;
+            pendingStart = null;
+          }
+          continue;
+        }
+
+        // Plain text line without timestamp range
+        let sentenceText = trimmed;
         let vietnameseText = "";
 
-        if (sentenceText.includes("|")) {
-          const parts = sentenceText.split("|");
+        if (trimmed.includes("|")) {
+          const parts = trimmed.split("|");
           sentenceText = parts[0].trim();
           vietnameseText = parts.slice(1).join("|").replace(/^Dịch:\s*/i, "").trim();
-        } else if (/\(Dịch:\s*/i.test(sentenceText)) {
-          const vMatch = sentenceText.match(/^(.*?)\s*\(Dịch:\s*(.*?)\)$/i);
+        } else if (/\(Dịch:\s*/i.test(trimmed)) {
+          const vMatch = trimmed.match(/^(.*?)\s*\(Dịch:\s*(.*?)\)$/i);
           if (vMatch) {
             sentenceText = vMatch[1].trim();
             vietnameseText = vMatch[2].trim();
@@ -269,20 +362,10 @@ app.post("/api/transcript", async (req, res) => {
         }
 
         if (sentenceText) {
-          let startSec = currentTime;
-          let endSec = currentTime + 4;
-
-          if (pendingTimestamp) {
-            startSec = pendingTimestamp.start;
-            endSec = pendingTimestamp.end;
-            currentTime = endSec;
-          } else {
-            const wordCount = sentenceText.split(/\s+/).length;
-            const estimatedDuration = Math.max(3, Math.min(8, Math.round(wordCount * 0.4)));
-            startSec = currentTime;
-            endSec = currentTime + estimatedDuration;
-            currentTime = endSec;
-          }
+          const wordCount = sentenceText.split(/\s+/).length;
+          const estimatedDuration = Math.max(3, Math.min(8, Math.round(wordCount * 0.4)));
+          const startSec = pendingStart !== null ? pendingStart : currentTime;
+          const endSec = startSec + estimatedDuration;
 
           localSentences.push({
             id: idCounter++,
@@ -291,64 +374,13 @@ app.post("/api/transcript", async (req, res) => {
             end: Number(endSec.toFixed(2)),
             ...(vietnameseText ? { vietnamese: vietnameseText } : {}),
           });
-        }
-
-        pendingTimestamp = null;
-        pendingText = "";
-      };
-
-      for (let idx = 0; idx < lines.length; idx++) {
-        const line = lines[idx].trim();
-        if (!line) continue;
-
-        // Skip standalone index lines like "1", "2", "3" if followed by timestamps or text
-        if (/^\d+$/.test(line) && idx + 1 < lines.length) {
-          const nextLine = lines[idx + 1].trim();
-          if (timestampRangeRegex.test(nextLine) || nextLine.length > 0) {
-            continue;
-          }
-        }
-
-        const match = timestampRangeRegex.exec(line);
-        if (match) {
-          const startSec = parseTimestampToSeconds(match[1]);
-          const endSec = parseTimestampToSeconds(match[2]);
-          const remainingContent = line.replace(match[0], "").trim();
-
-          if (remainingContent) {
-            // Line has BOTH timestamp and text!
-            flushPending();
-            pendingTimestamp = { start: startSec, end: endSec };
-            pendingText = remainingContent;
-            flushPending();
-          } else {
-            // Standalone timestamp line! (e.g. "8.2s - 10.5s (2.3s)")
-            if (pendingText) {
-              // Text was on the line ABOVE the timestamp!
-              pendingTimestamp = { start: startSec, end: endSec };
-              flushPending();
-            } else {
-              // Timestamp is BEFORE the upcoming text line!
-              pendingTimestamp = { start: startSec, end: endSec };
-            }
-          }
-        } else {
-          // Line is text!
-          if (pendingText) {
-            pendingText += " " + line;
-          } else {
-            pendingText = line;
-          }
-          // If we already had a timestamp waiting, flush immediately!
-          if (pendingTimestamp) {
-            flushPending();
-          }
+          currentTime = endSec;
+          pendingStart = null;
         }
       }
-      flushPending();
 
       if (localSentences.length > 0) {
-        const hasTimestamps = /[\(\[]?(\d+(?::\d+)*(?:\.\d+)?\s*s?)\s*(?:-|-->|\to)\s*(\d+(?::\d+)*(?:\.\d+)?\s*s?)/i.test(userRawText);
+        const hasTimestamps = /^\s*[\(\[]?\d+:\d+/m.test(userRawText);
 
         // If text already has timestamps OR if Gemini AI is disabled, return local sentences immediately
         if (hasTimestamps || !ai) {
@@ -380,7 +412,7 @@ Quy tắc quan trọng:
    - Chỉ bỏ các đoạn hoàn toàn là nhạc không lời (instrumental breaks) không có tiếng hát/tiếng nói.
 3. MỐC THỜI GIAN CHÍNH XÁC CHUẨN TỪNG MILI GIÂY (DECIMAL):
    - Mốc thời gian "start" và "end" (giây) BẮT BUỘC PHẢI CHUẨN XÁC ĐẾN TỪNG MILI GIÂY (dạng số thực thập phân, ví dụ: 10.45, 14.82, 19.12...), TUYỆT ĐỐI KHÔNG ĐƯỢC làm tròn thành số nguyên hoặc tròn giây .00 (như 10.00 hay 15.00) để audio phát khớp từng mili giây.
-   - Nếu dữ liệu phụ đề thô ĐÃ CÓ SẴN mốc thời gian (ví dụ: "8.2s - 10.5s"), bạn BẮT BUỘC PHẢI GIỮ NGUYÊN mốc start = 8.2 và end = 10.5, TUYỆT ĐỐI KHÔNG ĐƯỢC tự ý kéo dài hay thay đổi mốc thời gian này.
+   - Nếu dữ liệu phụ đề thô ĐÃ CÓ SẴN mốc thời gian, hãy trích xuất và BẮT BUỘC SỬ DỤNG CHÍNH XÁC mốc thời gian lẻ tương ứng.
 4. KHÔNG DỊCH SANG TIẾNG VIỆT, giữ nguyên tiếng Anh gốc (chỉ thêm dấu câu thích hợp và viết hoa chữ cái đầu câu).
 5. KHÔNG ĐƯỢC tự ý thêm bớt hay thay đổi từ ngữ nào trong lời thoại gốc để giữ tính chính xác của bài nghe chính tả.
 
@@ -626,29 +658,31 @@ Hãy phân tích và trả về danh sách các câu hoàn chỉnh chính xác t
                   end: Number(s.end.toFixed(2)),
                 }));
 
+              const fallbackMergedSentences = mergeRawSegmentsLocally(rawSegments).map((seg, idx) => ({
+                id: idx + 1,
+                sentence: seg.sentence,
+                start: seg.start,
+                end: seg.end,
+              }));
+
               res.json({
                 videoId,
                 title: videoTitle,
                 author: authorName,
                 thumbnailUrl,
                 language: selectedLanguage,
-                sentences: finalSentences.length > 0 ? finalSentences : rawSegments.map((s, idx) => ({
-                  id: idx + 1,
-                  sentence: s.text,
-                  start: s.start,
-                  end: s.start + s.duration,
-                })),
+                sentences: finalSentences.length > 0 ? finalSentences : fallbackMergedSentences,
                 geminiEnhanced: finalSentences.length > 0,
                 isRestored: false,
               });
               return;
             } else {
-              console.warn("Gemini API key is not configured. Falling back to basic segmentation.");
-              const basicSentences = rawSegments.map((seg, idx) => ({
+              console.warn("Gemini API key is not configured. Grouping basic YouTube subtitle segments locally.");
+              const basicSentences = mergeRawSegmentsLocally(rawSegments).map((seg, idx) => ({
                 id: idx + 1,
-                sentence: seg.text,
+                sentence: seg.sentence,
                 start: seg.start,
-                end: seg.start + seg.duration,
+                end: seg.end,
               }));
 
               res.json({
