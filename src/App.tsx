@@ -424,55 +424,105 @@ export default function App() {
     setIsEvaluating(true);
     setEvaluationResult(null);
 
+    const targetSentence = sentences[currentIndex].sentence;
+    const vietnameseTrans = sentences[currentIndex].vietnamese;
+
+    // Helper for local normal comparison fallback
+    const evaluateLocally = () => {
+      const clean = (t: string) =>
+        (t || "")
+          .toLowerCase()
+          .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'–—]/g, "")
+          .replace(/\s+/g, " ")
+          .trim();
+
+      const normOrig = (targetSentence || "").replace(/\s+/g, " ").trim();
+      const normUser = (userInput || "").replace(/\s+/g, " ").trim();
+
+      const oWords = clean(normOrig).split(" ").filter(Boolean);
+      const iWords = clean(normUser).split(" ").filter(Boolean);
+
+      let matched = 0;
+      const iWordsCopy = [...iWords];
+      for (const w of oWords) {
+        const idx = iWordsCopy.indexOf(w);
+        if (idx !== -1) {
+          matched++;
+          iWordsCopy.splice(idx, 1);
+        }
+      }
+
+      const accuracy = oWords.length > 0 ? Math.round((matched / oWords.length) * 100) : 0;
+
+      let feedback = "Cố gắng lên nhé!";
+      if (accuracy >= 100) feedback = "Xuất sắc! Bạn chép hoàn toàn chính xác.";
+      else if (accuracy >= 80) feedback = "Rất tốt! Chỉ sai một vài lỗi nhỏ.";
+      else if (accuracy >= 50) feedback = "Tốt! Cần chú ý kỹ hơn các từ khó.";
+
+      return {
+        accuracy,
+        feedback,
+        vietnameseTranslation: vietnameseTrans || undefined,
+        corrections: [],
+      };
+    };
+
+    let resultData: any = null;
+
     try {
       const res = await fetch("/api/evaluate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          original: sentences[currentIndex].sentence,
+          original: targetSentence,
           input: userInput,
-          vietnamese: sentences[currentIndex].vietnamese,
+          vietnamese: vietnameseTrans,
         }),
       });
 
-      const resText = await res.text();
-      let data: any;
-      try {
-        data = JSON.parse(resText);
-      } catch (e) {
-        console.error("Non-JSON response from /api/evaluate:", resText);
-        throw new Error("Máy chủ phản hồi định dạng không hợp lệ. Vui lòng thử lại sau giây lát.");
-      }
-
-      if (!res.ok) {
-        throw new Error(data.error || "Không thể phân tích kết quả.");
-      }
-
-      setEvaluationResult(data);
-
-      // Save progress
-      const currentSentenceId = sentences[currentIndex].id;
-      const prevBest = progress[currentSentenceId] || 0;
-      if (data.accuracy > prevBest) {
-        const newProgress = { ...progress, [currentSentenceId]: data.accuracy };
-        setProgress(newProgress);
-        if (videoDetails) {
-          localStorage.setItem(`progress_${videoDetails.videoId}`, JSON.stringify(newProgress));
+      if (res.ok) {
+        const resText = await res.text();
+        if (resText && resText.trim()) {
+          try {
+            const parsed = JSON.parse(resText);
+            if (parsed && typeof parsed.accuracy === "number") {
+              resultData = parsed;
+            }
+          } catch (e) {
+            console.warn("Non-JSON response from /api/evaluate, using local fallback", e);
+          }
         }
       }
-    } catch (err: any) {
-      console.error(err);
-      alert(err.message || "Lỗi kiểm tra bài gõ.");
-    } finally {
-      setIsEvaluating(false);
-      setTimeout(() => {
-        if (isMobile) {
-          mobileTextareaRef.current?.focus();
-        } else {
-          desktopTextareaRef.current?.focus();
-        }
-      }, 50);
+    } catch (err) {
+      console.warn("Network error on /api/evaluate, using local fallback", err);
     }
+
+    // Fall back to local comparison if server API returned non-JSON, empty, or failed
+    if (!resultData) {
+      resultData = evaluateLocally();
+    }
+
+    setEvaluationResult(resultData);
+
+    // Save progress
+    const currentSentenceId = sentences[currentIndex].id;
+    const prevBest = progress[currentSentenceId] || 0;
+    if (resultData.accuracy > prevBest) {
+      const newProgress = { ...progress, [currentSentenceId]: resultData.accuracy };
+      setProgress(newProgress);
+      if (videoDetails) {
+        localStorage.setItem(`progress_${videoDetails.videoId}`, JSON.stringify(newProgress));
+      }
+    }
+
+    setIsEvaluating(false);
+    setTimeout(() => {
+      if (isMobile) {
+        mobileTextareaRef.current?.focus();
+      } else {
+        desktopInputRef.current?.focus();
+      }
+    }, 100);
   };
 
   // Input change & keydown handlers for Enter navigation
