@@ -473,15 +473,46 @@ export default function App() {
     }
   };
 
-  // Delete a single video entry from history
-  const handleDeleteHistoryItem = (videoIdToDelete: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  // Delete a single video entry completely from history and localStorage
+  const handleDeleteHistoryItem = (videoIdToDelete: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     const updatedHistory = history.filter((h) => h.videoId !== videoIdToDelete);
     setHistory(updatedHistory);
     try {
       localStorage.setItem("youtube_dictation_history", JSON.stringify(updatedHistory));
+      localStorage.removeItem(`sentences_${videoIdToDelete}`);
+      localStorage.removeItem(`progress_${videoIdToDelete}`);
     } catch (err) {
       console.error("Failed to save history after deletion", err);
+    }
+
+    if (videoDetails?.videoId === videoIdToDelete) {
+      setVideoDetails(null);
+      setSentences([]);
+      setEvaluationResult(null);
+      setUserInput("");
+      setProgress({});
+    }
+  };
+
+  // Clear all listening history completely
+  const handleClearAllHistory = () => {
+    if (!confirm("Bạn có chắc chắn muốn xóa toàn bộ lịch sử luyện tập không?")) return;
+    
+    history.forEach((h) => {
+      if (h.videoId) {
+        try {
+          localStorage.removeItem(`sentences_${h.videoId}`);
+          localStorage.removeItem(`progress_${h.videoId}`);
+        } catch (e) {}
+      }
+    });
+
+    setHistory([]);
+    try {
+      localStorage.removeItem("youtube_dictation_history");
+    } catch (err) {
+      console.error("Failed to clear history from localStorage", err);
     }
   };
 
@@ -943,9 +974,22 @@ Standard Output Format Example:
               {/* Recent History */}
               {history.length > 0 && (
                 <div className="mt-4 border-t-2 border-slate-200/60 pt-6">
-                  <div className="flex items-center gap-2 mb-4">
-                    <History className="text-slate-500" size={18} />
-                    <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider font-display">Lịch sử luyện tập gần đây</h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <History className="text-slate-500" size={18} />
+                      <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider font-display">
+                        Lịch sử luyện tập gần đây ({history.length})
+                      </h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleClearAllHistory}
+                      className="flex items-center gap-1 px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                      title="Xóa toàn bộ lịch sử nghe"
+                    >
+                      <Trash2 size={12} />
+                      <span>Xóa tất cả</span>
+                    </button>
                   </div>
                   <div className="bg-white border-2 border-slate-200 rounded-2xl divide-y divide-slate-100 shadow-sm overflow-hidden">
                     {history.map((hist, idx) => (
