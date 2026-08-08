@@ -808,7 +808,7 @@ export default function App() {
                             const prompt = `Please extract all subtitles (English or original language) of the YouTube video in this link (or from the video you just watched) and segment them into short clauses suitable for dictation practice.
 
 Important Rules:
-1. SEGMENT SENTENCES: Each segment MUST be 3 to 8 seconds long (max 6 - 12 words). IF A SENTENCE IS TOO LONG or contains compound clauses connected by "where", "and", "but", "so", "because", "when", etc. -> YOU MUST SPLIT THEM INTO SEPARATE SHORT CLAUSES so it is easy for learners to practice listening and typing.
+1. SEGMENT SENTENCES: Segment into complete natural clauses (5 - 12 words). DO NOT OVER-SPLIT or cut in the middle of phrases/prepositions (e.g. NEVER separate prepositions like "in" from "Hanoi, Vietnam"). ONLY split at natural sentence endings (. ! ?) or connecting conjunctions ("and", "but", "so", "because", "when", "where", "which").
 2. PRECISE INDIVIDUAL TIMESTAMPS (DETAILED TO MILLISECONDS):
    - Each segment's "start" and "end" timestamps MUST match exactly when the lyrics or spoken words are actually delivered in the audio.
    - Timestamps do NOT need to be continuous or adjoin back-to-back; natural pauses, gaps, or instrumental breaks between sentences should be preserved naturally.

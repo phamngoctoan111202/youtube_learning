@@ -93,6 +93,23 @@ function extractCaptionTracks(html: string): any[] | null {
   }
 }
 
+function endsWithIncompleteWord(text: string): boolean {
+  const clean = text.trim().toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'–—]/g, "");
+  const words = clean.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return false;
+  const lastWord = words[words.length - 1];
+
+  const danglingWords = new Set([
+    "in", "at", "on", "to", "for", "with", "of", "from", "by", "into", "about",
+    "through", "under", "over", "between", "behind", "after", "before",
+    "a", "an", "the",
+    "my", "your", "his", "her", "our", "their", "its", "this", "that", "these", "those",
+    "and", "but", "or", "so", "because", "when", "where", "which", "if", "than", "as"
+  ]);
+
+  return danglingWords.has(lastWord);
+}
+
 function mergeRawSegmentsLocally(rawSegments: Array<{ text: string; start: number; duration: number }>): Array<{ sentence: string; start: number; end: number }> {
   const result: Array<{ sentence: string; start: number; end: number }> = [];
   if (!rawSegments || rawSegments.length === 0) return result;
@@ -118,8 +135,9 @@ function mergeRawSegmentsLocally(rawSegments: Array<{ text: string; start: numbe
     const wordCount = currentText.split(/\s+/).length;
     const duration = currentEnd - currentStart;
     const endsWithPunctuation = /[.!?]$/.test(currentText);
+    const isDangling = endsWithIncompleteWord(currentText);
 
-    if (endsWithPunctuation || duration >= 4.5 || wordCount >= 8 || i === rawSegments.length - 1) {
+    if (endsWithPunctuation || ((duration >= 6.0 || wordCount >= 10) && !isDangling) || i === rawSegments.length - 1) {
       result.push({
         sentence: currentText.trim(),
         start: Number(currentStart.toFixed(2)),
