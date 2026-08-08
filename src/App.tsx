@@ -29,7 +29,9 @@ import {
   Edit3,
   Square,
   CheckSquare,
-  Languages
+  Languages,
+  Plus,
+  PlusCircle
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import Header from "./components/Header";
@@ -207,20 +209,90 @@ export default function App() {
     }
   };
 
-  const handleUpdateSentence = (updated: Sentence) => {
-    const updatedSentences = sentences.map((s) => (s.id === updated.id ? updated : s));
-    setSentences(updatedSentences);
-    saveSentencesForVideo(videoDetails?.videoId, updatedSentences);
-    if (sentences[currentIndex]?.id === updated.id) {
+  const [isInsertMode, setIsInsertMode] = useState(false);
+
+  const handleUpdateSentence = (updatedOrNew: Sentence) => {
+    if (isInsertMode) {
+      const refSentenceId = editingSentence?.id;
+      let insertIdx = sentences.length;
+      if (refSentenceId !== undefined) {
+        const found = sentences.findIndex((s) => s.id === refSentenceId);
+        if (found !== -1) {
+          insertIdx = found + 1;
+        }
+      }
+
+      const maxId = sentences.reduce((max, s) => Math.max(max, s.id), 0);
+      const newSentence: Sentence = {
+        id: maxId + 1,
+        sentence: updatedOrNew.sentence,
+        vietnamese: updatedOrNew.vietnamese,
+        start: updatedOrNew.start,
+        end: updatedOrNew.end,
+      };
+
+      const updatedSentences = [
+        ...sentences.slice(0, insertIdx),
+        newSentence,
+        ...sentences.slice(insertIdx),
+      ];
+
+      setSentences(updatedSentences);
+      saveSentencesForVideo(videoDetails?.videoId, updatedSentences);
+      setCurrentIndex(insertIdx);
       setUserInput("");
       setEvaluationResult(null);
+    } else {
+      const updatedSentences = sentences.map((s) => (s.id === updatedOrNew.id ? updatedOrNew : s));
+      setSentences(updatedSentences);
+      saveSentencesForVideo(videoDetails?.videoId, updatedSentences);
+      if (sentences[currentIndex]?.id === updatedOrNew.id) {
+        setUserInput("");
+        setEvaluationResult(null);
+      }
     }
   };
 
-  const handleOpenEditSentence = (s: Sentence, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleOpenEditSentence = (s: Sentence, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     setEditingSentence(s);
+    setIsInsertMode(false);
     setIsEditModalOpen(true);
+  };
+
+  const handleOpenAddSentence = (targetSentence?: Sentence, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const refSentence = targetSentence || sentences[currentIndex] || {
+      id: 1,
+      sentence: "",
+      start: 0,
+      end: 4,
+    };
+    setEditingSentence(refSentence);
+    setIsInsertMode(true);
+    setIsEditModalOpen(true);
+  };
+
+  const handleDeleteSentence = (sentenceId: number, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (sentences.length <= 1) {
+      alert("Không thể xóa câu duy nhất còn lại.");
+      return;
+    }
+    if (!confirm("Bạn có chắc chắn muốn xóa câu này không?")) return;
+
+    const targetIdx = sentences.findIndex((s) => s.id === sentenceId);
+    if (targetIdx === -1) return;
+
+    const updatedSentences = sentences.filter((s) => s.id !== sentenceId);
+    setSentences(updatedSentences);
+    saveSentencesForVideo(videoDetails?.videoId, updatedSentences);
+
+    if (currentIndex >= updatedSentences.length) {
+      setCurrentIndex(Math.max(0, updatedSentences.length - 1));
+    }
+    setUserInput("");
+    setEvaluationResult(null);
   };
 
   // Auto-change loading messages for realistic feel
@@ -1179,23 +1251,34 @@ Standard Output Format Example:
                 <div className="max-h-[280px] overflow-y-auto p-3 flex flex-col gap-2">
                   <div className="flex items-center justify-between px-1 pb-1.5 border-b border-slate-100 flex-wrap gap-1">
                     <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold font-mono">Danh sách câu ({sentences.length})</span>
-                    {selectedSentenceIds.length >= 2 && (
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={handleMergeSentences}
-                          className="flex items-center gap-1 px-2 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-[10px] font-bold shadow-xs cursor-pointer"
-                        >
-                          <Layers size={10} />
-                          <span>Gộp {selectedSentenceIds.length} câu</span>
-                        </button>
-                        <button
-                          onClick={() => setSelectedSentenceIds([])}
-                          className="px-1 text-[9px] text-slate-400 hover:text-slate-600"
-                        >
-                          Hủy
-                        </button>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenAddSentence()}
+                        className="flex items-center gap-0.5 px-1.5 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded text-[9px] font-bold cursor-pointer transition-colors"
+                        title="Thêm câu mới vào bài học"
+                      >
+                        <PlusCircle size={10} />
+                        <span>Thêm câu mới</span>
+                      </button>
+                      {selectedSentenceIds.length >= 2 && (
+                        <>
+                          <button
+                            onClick={handleMergeSentences}
+                            className="flex items-center gap-1 px-2 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-[10px] font-bold shadow-xs cursor-pointer"
+                          >
+                            <Layers size={10} />
+                            <span>Gộp {selectedSentenceIds.length} câu</span>
+                          </button>
+                          <button
+                            onClick={() => setSelectedSentenceIds([])}
+                            className="px-1 text-[9px] text-slate-400 hover:text-slate-600"
+                          >
+                            Hủy
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
 
                   {sentences.map((sentence, idx) => {
@@ -1270,6 +1353,33 @@ Standard Output Format Example:
                                 </span>
                               )}
 
+                              <button
+                                type="button"
+                                onClick={(e) => handleOpenAddSentence(sentence, e)}
+                                className="p-0.5 text-slate-400 hover:text-emerald-600 rounded cursor-pointer"
+                                title="Thêm câu mới ngay sau câu này"
+                              >
+                                <Plus size={10} />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={(e) => handleOpenEditSentence(sentence, e)}
+                                className="p-0.5 text-slate-400 hover:text-blue-600 rounded cursor-pointer"
+                                title="Chỉnh sửa câu"
+                              >
+                                <Edit3 size={10} />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={(e) => handleDeleteSentence(sentence.id, e)}
+                                className="p-0.5 text-slate-400 hover:text-rose-600 rounded cursor-pointer"
+                                title="Xóa câu này"
+                              >
+                                <Trash2 size={10} />
+                              </button>
+
                               {sentence.isMerged && (
                                 <button
                                   type="button"
@@ -1281,15 +1391,6 @@ Standard Output Format Example:
                                   <span>Tách</span>
                                 </button>
                               )}
-
-                              <button
-                                type="button"
-                                onClick={(e) => handleOpenEditSentence(sentence, e)}
-                                className="p-0.5 text-slate-400 hover:text-blue-600 rounded"
-                                title="Chỉnh sửa câu"
-                              >
-                                <Edit3 size={10} />
-                              </button>
                             </div>
                           </div>
                         </div>
@@ -1627,29 +1728,41 @@ Standard Output Format Example:
                   {/* Sentence list scroll area */}
                   <div className="max-h-[380px] overflow-y-auto p-3 flex flex-col gap-2" id="sentence-scroll-list">
                     <div className="flex items-center justify-between px-2 pb-1.5 border-b border-slate-100 flex-wrap gap-2">
-                      <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold font-mono">
-                        Danh sách câu ({sentences.length})
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest font-mono">
+                        Danh sách ({sentences.length} câu)
                       </span>
-                      {selectedSentenceIds.length >= 2 && (
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={handleMergeSentences}
-                            className="flex items-center gap-1 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[10px] font-bold shadow-xs cursor-pointer transition-all animate-pulse"
-                            title="Gộp các câu đã chọn thành 1 câu dài"
-                          >
-                            <Layers size={11} />
-                            <span>Gộp {selectedSentenceIds.length} câu</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedSentenceIds([])}
-                            className="px-1.5 py-1 text-[10px] text-slate-400 hover:text-slate-600 cursor-pointer font-medium"
-                          >
-                            Hủy
-                          </button>
-                        </div>
-                      )}
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenAddSentence()}
+                          className="flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                          title="Thêm câu mới vào bài học"
+                        >
+                          <PlusCircle size={13} />
+                          <span>Thêm câu</span>
+                        </button>
+
+                        {selectedSentenceIds.length >= 2 && (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={handleMergeSentences}
+                              className="flex items-center gap-1 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
+                            >
+                              <Layers size={11} />
+                              <span>Gộp {selectedSentenceIds.length} câu</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedSentenceIds([])}
+                              className="px-1.5 py-1 text-[10px] text-slate-400 hover:text-slate-600 cursor-pointer font-medium"
+                            >
+                              Hủy
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {sentences.map((sentence, idx) => {
@@ -1723,6 +1836,33 @@ Standard Output Format Example:
                                   </span>
                                 )}
 
+                                <button
+                                   type="button"
+                                   onClick={(e) => handleOpenAddSentence(sentence, e)}
+                                   className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors cursor-pointer"
+                                   title="Thêm câu mới ngay sau câu này"
+                                 >
+                                   <Plus size={12} />
+                                 </button>
+
+                                 <button
+                                   type="button"
+                                   onClick={(e) => handleOpenEditSentence(sentence, e)}
+                                   className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors cursor-pointer"
+                                   title="Chỉnh sửa nội dung và mốc thời gian"
+                                 >
+                                   <Edit3 size={12} />
+                                 </button>
+
+                                 <button
+                                   type="button"
+                                   onClick={(e) => handleDeleteSentence(sentence.id, e)}
+                                   className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                                   title="Xóa câu này"
+                                 >
+                                   <Trash2 size={12} />
+                                 </button> 
+
                                 {sentence.isMerged && (
                                   <button
                                     type="button"
@@ -1771,14 +1911,16 @@ Standard Output Format Example:
         contextSentence={vocabContextSentence}
       />
 
-      {/* Edit Sentence & Timestamps Modal */}
+      {/* Edit / Insert Sentence & Timestamps Modal */}
       <EditSentenceModal
         isOpen={isEditModalOpen}
         onClose={() => {
           setIsEditModalOpen(false);
           setEditingSentence(null);
+          setIsInsertMode(false);
         }}
         sentence={editingSentence}
+        isInsertMode={isInsertMode}
         onSave={handleUpdateSentence}
         onTestPlay={() => {
           setPlayTrigger((prev) => prev + 1);

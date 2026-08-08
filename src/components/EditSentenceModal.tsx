@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, Clock, Play, Save, Edit3 } from "lucide-react";
+import { X, Clock, Play, Save, Edit3, PlusCircle } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Sentence } from "../types";
 
@@ -9,6 +9,7 @@ interface EditSentenceModalProps {
   sentence: Sentence | null;
   onSave: (updated: Sentence) => void;
   onTestPlay: () => void;
+  isInsertMode?: boolean;
 }
 
 export default function EditSentenceModal({
@@ -17,6 +18,7 @@ export default function EditSentenceModal({
   sentence,
   onSave,
   onTestPlay,
+  isInsertMode = false,
 }: EditSentenceModalProps) {
   const [text, setText] = useState("");
   const [vietnamese, setVietnamese] = useState("");
@@ -25,12 +27,20 @@ export default function EditSentenceModal({
 
   useEffect(() => {
     if (sentence) {
-      setText(sentence.sentence);
-      setVietnamese(sentence.vietnamese || "");
-      setStart(Number(sentence.start.toFixed(2)));
-      setEnd(Number(sentence.end.toFixed(2)));
+      if (isInsertMode) {
+        setText("");
+        setVietnamese("");
+        const newStart = Number(sentence.end.toFixed(2));
+        setStart(newStart);
+        setEnd(Number((newStart + 4).toFixed(2)));
+      } else {
+        setText(sentence.sentence);
+        setVietnamese(sentence.vietnamese || "");
+        setStart(Number(sentence.start.toFixed(2)));
+        setEnd(Number(sentence.end.toFixed(2)));
+      }
     }
-  }, [sentence]);
+  }, [sentence, isInsertMode]);
 
   if (!isOpen || !sentence) return null;
 
@@ -66,15 +76,15 @@ export default function EditSentenceModal({
           {/* Top Header */}
           <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
             <div className="flex items-center gap-2.5">
-              <div className="p-2 bg-blue-50 text-blue-600 rounded-xl border border-blue-100">
-                <Edit3 size={20} />
+              <div className={`p-2 rounded-xl border ${isInsertMode ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-blue-50 text-blue-600 border-blue-100"}`}>
+                {isInsertMode ? <PlusCircle size={20} /> : <Edit3 size={20} />}
               </div>
               <div>
                 <h3 className="text-slate-900 font-bold font-display text-base">
-                  Chỉnh sửa Câu #{sentence.id}
+                  {isInsertMode ? `Thêm câu mới (Chèn sau câu #${sentence.id})` : `Chỉnh sửa Câu #${sentence.id}`}
                 </h3>
                 <p className="text-slate-400 text-xs font-medium">
-                  Tùy chỉnh nội dung câu, bản dịch và mốc thời gian phát audio
+                  {isInsertMode ? "Nhập nội dung và cài đặt mốc thời gian cho câu mới" : "Tùy chỉnh nội dung câu, bản dịch và mốc thời gian phát audio"}
                 </p>
               </div>
             </div>
@@ -92,14 +102,15 @@ export default function EditSentenceModal({
             {/* Sentence Text Input */}
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-slate-600 uppercase tracking-wider font-display">
-                Nội dung lời thoại (Tiếng Anh):
+                Nội dung lời thoại (Tiếng Anh) <span className="text-rose-500">*</span>:
               </label>
               <textarea
                 rows={2}
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 className="w-full p-3 bg-slate-50 border-2 border-slate-200 focus:border-blue-500 focus:bg-white rounded-xl text-slate-800 outline-none text-xs sm:text-sm font-medium leading-relaxed resize-none transition-all"
-                placeholder="Nhập nội dung chuẩn của câu..."
+                placeholder="Nhập nội dung tiếng Anh của câu..."
+                autoFocus
               />
             </div>
 
@@ -210,10 +221,11 @@ export default function EditSentenceModal({
             <button
               type="button"
               onClick={handleSave}
-              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs transition-all shadow-md shadow-blue-600/10 flex items-center gap-1.5 cursor-pointer"
+              disabled={!text.trim()}
+              className={`px-5 py-2.5 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${isInsertMode ? "bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/10" : "bg-blue-600 hover:bg-blue-500 shadow-blue-600/10"}`}
             >
-              <Save size={14} />
-              <span>Lưu thay đổi</span>
+              {isInsertMode ? <PlusCircle size={14} /> : <Save size={14} />}
+              <span>{isInsertMode ? "Lưu & Thêm câu" : "Lưu thay đổi"}</span>
             </button>
           </div>
         </motion.div>
