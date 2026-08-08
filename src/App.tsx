@@ -31,7 +31,10 @@ import {
   CheckSquare,
   Languages,
   Plus,
-  PlusCircle
+  PlusCircle,
+  Flame,
+  Cloud,
+  CloudDownload
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import Header from "./components/Header";
@@ -41,6 +44,12 @@ import AddVocabularyModal from "./components/AddVocabularyModal";
 import EditSentenceModal from "./components/EditSentenceModal";
 import { RECOMMENDED_VIDEOS } from "./data";
 import { Sentence, VideoDetails, EvaluationResult } from "./types";
+import {
+  saveVideoToFirestore,
+  deleteVideoFromFirestore,
+  getAllVideosFromFirestore,
+  getVideoFromFirestore,
+} from "./lib/firebase";
 
 export default function App() {
   // Input URL states
@@ -146,6 +155,8 @@ export default function App() {
         }
         return updatedHistory;
       });
+      // Save/Sync to Firebase Firestore Cloud DB
+      saveVideoToFirestore(videoId, videoDetails, updatedSentences);
     } catch (err) {
       console.error("Failed to save sentences to localStorage", err);
     }
@@ -455,21 +466,32 @@ export default function App() {
       ].slice(0, 10); // Keep last 10 entries
 
       setHistory(updatedHistory);
-      try {
-        localStorage.setItem("youtube_dictation_history", JSON.stringify(updatedHistory));
-      } catch (storageError) {
-        console.warn("Storage quota exceeded, trying to save with less data", storageError);
         try {
-          const strippedHistory = updatedHistory.map((h, idx) => 
-            idx === 0 ? h : { ...h, sentences: [] }
-          );
-          localStorage.setItem("youtube_dictation_history", JSON.stringify(strippedHistory));
-        } catch (e) {
-          console.error("Could not save history even after stripping data");
+          localStorage.setItem("youtube_dictation_history", JSON.stringify(updatedHistory));
+        } catch (storageError) {
+          console.warn("Storage quota exceeded, trying to save with less data", storageError);
+          try {
+            const strippedHistory = updatedHistory.map((h, idx) => 
+              idx === 0 ? h : { ...h, sentences: [] }
+            );
+            localStorage.setItem("youtube_dictation_history", JSON.stringify(strippedHistory));
+          } catch (e) {
+            console.error("Could not save history even after stripping data");
+          }
         }
-      }
 
-    } catch (err: any) {
+        // Sync video and sub segments to Firebase Firestore Cloud DB
+        saveVideoToFirestore(
+          data.videoId,
+          data.videoDetails || {
+            videoId: data.videoId,
+            title: data.title,
+            author: data.author,
+            thumbnailUrl: data.thumbnailUrl,
+          },
+          sentencesToUse
+        );
+      } catch (err: any) {
       console.error(err);
       setError(err.message || "Đã xảy ra lỗi không xác định. Vui lòng thử lại.");
     } finally {
@@ -486,6 +508,9 @@ export default function App() {
       localStorage.setItem("youtube_dictation_history", JSON.stringify(updatedHistory));
       localStorage.removeItem(`sentences_${videoIdToDelete}`);
       localStorage.removeItem(`progress_${videoIdToDelete}`);
+
+      // Delete from Firebase Firestore Cloud DB
+      deleteVideoFromFirestore(videoIdToDelete).catch(() => {});
     } catch (err) {
       console.error("Failed to save history after deletion", err);
     }
@@ -1081,22 +1106,60 @@ Standard Output Format Example:
               {/* Recent History */}
               {history.length > 0 && (
                 <div className="mt-4 border-t-2 border-slate-200/60 pt-6">
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                     <div className="flex items-center gap-2">
                       <History className="text-slate-500" size={18} />
                       <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider font-display">
-                        Lịch sử luyện tập gần đây ({history.length})
+                        Lịch sử luyện tập ({history.length})
                       </h3>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleClearAllHistory}
-                      className="flex items-center gap-1 px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs"
-                      title="Xóa toàn bộ lịch sử nghe"
-                    >
-                      <Trash2 size={12} />
-                      <span>Xóa tất cả</span>
-                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setIsLoading(true);
+                          const firestoreLessons = await getAllVideosFromFirestore();
+                          setIsLoading(false);
+                          if (firestoreLessons.length > 0) {
+                            const cloudHistory = firestoreLessons.map((item) => ({
+                              videoId: item.videoId,
+                              title: item.title,
+                              date: new Date(item.updatedAt).toLocaleDateString("vi-VN"),
+                              sentences: item.sentences,
+                              videoDetails: {
+                                videoId: item.videoId,
+                                title: item.title,
+                                author: item.author,
+                                thumbnailUrl: item.thumbnailUrl,
+                              },
+                            }));
+                            setHistory(cloudHistory);
+                            try {
+                              localStorage.setItem("youtube_dictation_history", JSON.stringify(cloudHistory));
+                            } catch (e) {}
+                            alert(`Đã đồng bộ thành công ${firestoreLessons.length} bài học từ Firebase Firestore!`);
+                          } else {
+                            alert("Chưa có bài học nào được lưu trên Firebase Firestore.");
+                          }
+                        }}
+                        className="flex items-center gap-1 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                        title="Tải toàn bộ bài học lưu trên Firebase Firestore"
+                      >
+                        <Flame size={13} className="fill-amber-500 text-amber-500" />
+                        <span>Tải từ Firestore</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleClearAllHistory}
+                        className="flex items-center gap-1 px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                        title="Xóa toàn bộ lịch sử nghe"
+                      >
+                        <Trash2 size={12} />
+                        <span>Xóa tất cả</span>
+                      </button>
+                    </div>
                   </div>
                   <div className="bg-white border-2 border-slate-200 rounded-2xl divide-y divide-slate-100 shadow-sm overflow-hidden">
                     {history.map((hist, idx) => (
