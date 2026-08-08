@@ -2,16 +2,16 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-COPY package*.json bun.lock ./
+COPY package*.json ./
 
-RUN npm install
+RUN npm install --include=dev
 
 COPY . .
 
-ENV NODE_ENV=production
-
 RUN npm run build
+
+ENV NODE_ENV=production
 
 EXPOSE 3000
 
-CMD ["npm", "run", "start"]
+CMD ["node", "dist/server.cjs"]
