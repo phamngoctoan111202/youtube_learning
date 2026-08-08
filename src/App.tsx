@@ -100,6 +100,10 @@ export default function App() {
   const [vocabDefaultWord, setVocabDefaultWord] = useState("");
   const [vocabContextSentence, setVocabContextSentence] = useState("");
 
+  // Prompt Generator time range states
+  const [promptStartMin, setPromptStartMin] = useState("0");
+  const [promptEndMin, setPromptEndMin] = useState("5");
+
   // Sentence selection, merge & edit modal states
   const [selectedSentenceIds, setSelectedSentenceIds] = useState<number[]>([]);
   const [editingSentence, setEditingSentence] = useState<Sentence | null>(null);
@@ -828,40 +832,68 @@ export default function App() {
                   </div>
 
                   <div className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-1.5">
-                      <div className="flex items-center justify-between flex-wrap gap-1">
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
                         <label htmlFor="pasted-text-input" className="text-xs font-bold text-slate-500 uppercase tracking-wider font-display">
                           Dán văn bản phụ đề thô (Không bắt buộc):
                         </label>
+                      </div>
+
+                      {/* Prompt Generator Range Control & Button */}
+                      <div className="flex items-center justify-between flex-wrap gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                        <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium flex-wrap">
+                          <Clock size={14} className="text-blue-500 shrink-0" />
+                          <span className="font-bold font-display">Tạo Prompt từ phút:</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="300"
+                            value={promptStartMin}
+                            onChange={(e) => setPromptStartMin(e.target.value)}
+                            className="w-12 px-1.5 py-0.5 bg-white border border-slate-300 focus:border-blue-500 rounded text-center font-mono font-bold text-xs outline-none shadow-2xs"
+                          />
+                          <span>đến phút:</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="300"
+                            value={promptEndMin}
+                            onChange={(e) => setPromptEndMin(e.target.value)}
+                            className="w-12 px-1.5 py-0.5 bg-white border border-slate-300 focus:border-blue-500 rounded text-center font-mono font-bold text-xs outline-none shadow-2xs"
+                          />
+                        </div>
+
                         <button
                           type="button"
                           onClick={() => {
-                            const prompt = `Please extract all subtitles (English or original language) of the YouTube video in this link (or from the video you just watched) and segment them into short clauses suitable for dictation practice.
+                            const startM = promptStartMin.trim() || "0";
+                            const endM = promptEndMin.trim() || "5";
+                            const prompt = `Please extract all subtitles (English or original language) from minute ${startM}:00 to minute ${endM}:00 of the YouTube video in this link (or from the video you just watched) and segment them into short clauses suitable for dictation practice.
 
 Important Rules:
 1. SEGMENT SENTENCES: Segment into complete natural clauses (5 - 12 words). DO NOT OVER-SPLIT or cut in the middle of phrases/prepositions (e.g. NEVER separate prepositions like "in" from "Hanoi, Vietnam"). ONLY split at natural sentence endings (. ! ?) or connecting conjunctions ("and", "but", "so", "because", "when", "where", "which").
 2. PRECISE INDIVIDUAL TIMESTAMPS (DETAILED TO MILLISECONDS):
    - Each segment's "start" and "end" timestamps MUST match exactly when the lyrics or spoken words are actually delivered in the audio.
    - Timestamps do NOT need to be continuous or adjoin back-to-back; natural pauses, gaps, or instrumental breaks between sentences should be preserved naturally.
-   - Timestamps MUST have exact decimal numbers detailed to milliseconds (e.g. 0:10.45 - 0:18.12). ABSOLUTELY DO NOT round to whole seconds or ending with .00 (such as 0:10.00 or 0:18.00).
+   - Timestamps MUST have exact decimal numbers detailed to milliseconds (e.g. ${startM}:10.45 - ${startM}:18.12). ABSOLUTELY DO NOT round to whole seconds or ending with .00 (such as ${startM}:10.00 or ${startM}:18.00).
 3. VIETNAMESE TRANSLATION: Attach an accurate Vietnamese translation for each segment (separated after a pipe | or in parentheses).
 
 Standard Output Format Example:
-(0:10.45 - 0:18.12): I just woke up from my dream where you and I had to say goodbye | Dịch: Tôi vừa tỉnh dậy sau giấc mơ nơi bạn và tôi phải nói lời tạm biệt
-(0:18.12 - 0:23.50): and I don't know what it all means | Dịch: và tôi không biết tất cả điều này có nghĩa là gì
-(0:23.50 - 0:28.05): but since I survived I realized | Dịch: nhưng từ khi tôi sống sót tôi mới nhận ra`;
+(${startM}:10.45 - ${startM}:18.12): I just woke up from my dream where you and I had to say goodbye | Dịch: Tôi vừa tỉnh dậy sau giấc mơ nơi bạn và tôi phải nói lời tạm biệt
+(${startM}:18.12 - ${startM}:23.50): and I don't know what it all means | Dịch: và tôi không biết tất cả điều này có nghĩa là gì
+(${startM}:23.50 - ${startM}:28.05): but since I survived I realized | Dịch: nhưng từ khi tôi sống sót tôi mới nhận ra`;
                             navigator.clipboard.writeText(prompt);
                             setIsCopied(true);
                             setTimeout(() => setIsCopied(false), 2000);
                           }}
-                          className={`flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg border transition-colors ${
+                          className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border transition-all cursor-pointer shadow-2xs ${
                             isCopied 
                               ? "bg-emerald-50 text-emerald-600 border-emerald-200" 
-                              : "bg-amber-50 text-amber-600 hover:text-amber-700 border-amber-200"
+                              : "bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200/80"
                           }`}
                         >
-                          {isCopied ? <Check size={12} /> : <Clipboard size={12} />}
-                          <span>{isCopied ? "Đã sao chép" : "Copy định dạng mẫu"}</span>
+                          {isCopied ? <Check size={14} /> : <Clipboard size={14} />}
+                          <span>{isCopied ? "Đã sao chép Prompt!" : `Copy Prompt mẫu (${promptStartMin || 0}m - ${promptEndMin || 5}m)`}</span>
                         </button>
                       </div>
                       <textarea
