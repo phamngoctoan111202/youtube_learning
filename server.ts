@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -11,97 +10,9 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(express.json());
 
-// Initialize Gemini SDK with single unique log key for debugging connection issues
-const LOG_KEY = "[GEMINI_DEBUG]";
-
-const safeParseJsonText = (text: string) => {
-  if (!text) throw new Error("Empty text provided for JSON parsing");
-  let cleaned = text.trim();
-  if (cleaned.startsWith("```")) {
-    cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-  }
-  return JSON.parse(cleaned);
-};
-const apiKey = process.env.GEMINI_API_KEY;
-
-if (!apiKey) {
-  console.warn(`${LOG_KEY} WARNING: GEMINI_API_KEY is NOT set in environment variables (process.env.GEMINI_API_KEY is undefined or empty). Gemini features will be disabled or fall back to local mode.`);
-} else {
-  const maskedKey = apiKey.length > 10 ? `${apiKey.substring(0, 6)}...${apiKey.slice(-4)}` : "***";
-  console.log(`${LOG_KEY} GEMINI_API_KEY detected (Length: ${apiKey.length}, Masked: ${maskedKey}). Initializing GoogleGenAI client.`);
-}
-
-const ai = apiKey
-  ? new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          "User-Agent": "aistudio-build",
-        },
-      },
-    })
-  : null;
-
-// Diagnostic endpoint to test Gemini API connection with [GEMINI_DEBUG] key
-app.get("/api/test-gemini", async (req, res) => {
-  console.log(`${LOG_KEY} GET /api/test-gemini requested.`);
-
-  if (!apiKey) {
-    console.error(`${LOG_KEY} Test Failed: GEMINI_API_KEY is not defined in process.env.`);
-    res.status(500).json({
-      success: false,
-      logKey: LOG_KEY,
-      error: "GEMINI_API_KEY is not defined in process.env.",
-    });
-    return;
-  }
-
-  if (!ai) {
-    console.error(`${LOG_KEY} Test Failed: GoogleGenAI instance is null.`);
-    res.status(500).json({
-      success: false,
-      logKey: LOG_KEY,
-      error: "GoogleGenAI instance is null.",
-    });
-    return;
-  }
-
-  const maskedKey = apiKey.length > 10 ? `${apiKey.substring(0, 6)}...${apiKey.slice(-4)}` : "***";
-  console.log(`${LOG_KEY} Testing connection with model gemini-2.0-flash using key (${maskedKey})...`);
-
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: "Hello Gemini! Respond with 'CONNECTION_OK' if you can read this.",
-    });
-
-    const reply = response.text?.trim() || "No text returned";
-    console.log(`${LOG_KEY} Test SUCCESS! Response from Gemini: "${reply}"`);
-
-    res.json({
-      success: true,
-      logKey: LOG_KEY,
-      maskedApiKey: maskedKey,
-      response: reply,
-    });
-  } catch (err: any) {
-    console.error(`${LOG_KEY} Test FAILED! Exception caught:`, {
-      message: err.message,
-      status: err.status,
-      code: err.code,
-      stack: err.stack,
-    });
-
-    res.status(500).json({
-      success: false,
-      logKey: LOG_KEY,
-      maskedApiKey: maskedKey,
-      error: err.message || String(err),
-      status: err.status,
-      code: err.code,
-      details: err.stack,
-    });
-  }
+// Diagnostic health endpoint
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok" });
 });
 
 // Utility functions for YouTube processing
@@ -183,11 +94,6 @@ function extractCaptionTracks(html: string): any[] | null {
   }
 }
 
-// REST API Endpoints
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", geminiConfigured: !!ai });
-});
-
 function mergeRawSegmentsLocally(rawSegments: Array<{ text: string; start: number; duration: number }>): Array<{ sentence: string; start: number; end: number }> {
   const result: Array<{ sentence: string; start: number; end: number }> = [];
   if (!rawSegments || rawSegments.length === 0) return result;
@@ -235,13 +141,13 @@ function mergeRawSegmentsLocally(rawSegments: Array<{ text: string; start: numbe
   return result;
 }
 
-// Endpoint to fetch video details and segment transcript
+// Endpoint to fetch video details and segment transcript locally
 app.post("/api/transcript", async (req, res) => {
   try {
     const { url, html: userHtml, rawText: userRawText } = req.body;
     if (!url) {
-       res.status(400).json({ error: "Vui lòng cung cấp URL video YouTube" });
-       return;
+      res.status(400).json({ error: "Vui lòng cung cấp URL video YouTube" });
+      return;
     }
 
     let videoId = extractVideoId(url);
@@ -250,8 +156,8 @@ app.post("/api/transcript", async (req, res) => {
     }
 
     if (!videoId) {
-       res.status(400).json({ error: "URL YouTube không hợp lệ" });
-       return;
+      res.status(400).json({ error: "URL YouTube không hợp lệ" });
+      return;
     }
 
     // 1. Fetch Video Metadata via oEmbed (very safe, reliable, no API key required)
@@ -273,7 +179,7 @@ app.post("/api/transcript", async (req, res) => {
       console.warn("Failed to fetch oEmbed metadata:", metadataError);
     }
 
-    // A. Handle user-provided RAW TEXT transcript directly (No Gemini API required)
+    // A. Handle user-provided RAW TEXT transcript directly
     if (userRawText && userRawText.trim()) {
       console.log("Parsing user-provided raw text transcript locally...");
       
@@ -294,31 +200,23 @@ app.post("/api/transcript", async (req, res) => {
       let idCounter = 1;
       let pendingStart: number | null = null;
 
-      // Regex matching timestamp range lines like:
-      // (0:08.52 - 0:13.25): sentence | Dịch: vietnamese
-      // 00:00:08,520 --> 00:00:13,250 sentence
       const timestampRangeRegex = /^\s*[\(\[]?(\d+:\d+(?:[.,]\d+)?(?::\d+(?:[.,]\d+)?)?)\s*(?:-|-->|\to)\s*(\d+:\d+(?:[.,]\d+)?(?::\d+(?:[.,]\d+)?)?)[\)\]]?:?\s*(.*)$/i;
-
-      // Single timestamp line like: "0:08.52" or "0:08"
       const singleTimestampRegex = /^\s*[\(\[]?(\d+:\d+(?:[.,]\d+)?(?::\d+(?:[.,]\d+)?)?)[\)\]]?\s*$/;
 
       for (let i = 0; i < lines.length; i++) {
         const trimmed = lines[i].trim();
         if (!trimmed) continue;
 
-        // Ignore standalone index numbers (e.g. "1", "2" from SRT subtitle blocks)
         if (/^\d+$/.test(trimmed) && trimmed.length < 5) {
           continue;
         }
 
-        // Check single timestamp line
         const singleMatch = singleTimestampRegex.exec(trimmed);
         if (singleMatch) {
           pendingStart = parseTimestampToSeconds(singleMatch[1]);
           continue;
         }
 
-        // Check timestamp range line
         const rangeMatch = timestampRangeRegex.exec(trimmed);
         if (rangeMatch) {
           const startSec = parseTimestampToSeconds(rangeMatch[1]);
@@ -354,7 +252,6 @@ app.post("/api/transcript", async (req, res) => {
           continue;
         }
 
-        // Plain text line without timestamp range
         let sentenceText = trimmed;
         let vietnameseText = "";
 
@@ -389,113 +286,7 @@ app.post("/api/transcript", async (req, res) => {
       }
 
       if (localSentences.length > 0) {
-        const hasTimestamps = /^\s*[\(\[]?\d+:\d+/m.test(userRawText);
-
-        // If text already has timestamps OR if Gemini AI is disabled, return local sentences immediately
-        if (hasTimestamps || !ai) {
-          console.log(`Parsed ${localSentences.length} sentences locally without Gemini API.`);
-          res.json({
-            videoId,
-            title: videoTitle,
-            author: authorName,
-            thumbnailUrl,
-            language: "en",
-            sentences: localSentences,
-            geminiEnhanced: false,
-            isRestored: false,
-            isManualText: true
-          });
-          return;
-        }
-
-        // Optional AI enhancement for plain text without timestamps
-        try {
-          const prompt = `You are an expert English linguist and dictation tutor. Below is raw transcript/subtitle text copied manually by the user.
-Please format, clean, fix capitalization and punctuation, and segment the transcript into short sentences suitable for dictation practice.
-
-Important Rules:
-1. SEGMENT SENTENCES: Each segment MUST be 3 to 8 seconds long (max 6 - 12 words). IF A SENTENCE IS TOO LONG or contains compound clauses connected by "where", "and", "but", "so", "because", "when", etc. -> YOU MUST SPLIT THEM INTO SEPARATE SHORT CLAUSES so it is easy for learners to practice listening and typing.
-2. PRECISE INDIVIDUAL TIMESTAMPS (DETAILED TO MILLISECONDS):
-   - Each segment's "start" and "end" timestamps MUST match exactly when the lyrics or spoken words are actually delivered in the audio.
-   - Timestamps do NOT need to be continuous or adjoin back-to-back; natural pauses, gaps, or instrumental breaks between sentences should be preserved.
-   - Timestamps "start" and "end" (in seconds) MUST BE PRECISE TO MILLISECONDS (decimal numbers, e.g., 10.45, 14.82, 19.12...). ABSOLUTELY DO NOT round to whole seconds or ending with .00 (such as 10.00 or 15.00) so audio playback syncs perfectly to milliseconds.
-   - If raw transcript data ALREADY HAS timestamps, extract and PRESERVE the exact decimal timestamps.
-3. KEEP ORIGINAL ENGLISH TEXT: Do not translate sentence to Vietnamese, preserve original English (only add proper punctuation and capitalization). Provide natural Vietnamese translation in the "vietnamese" field.
-4. PRESERVE ORIGINAL WORDS: Do not add, remove, or change any words from the original spoken text.
-
-Standard Output Format Example:
-(0:10.45 - 0:18.12): I just woke up from my dream where you and I had to say goodbye | Vietnamese: Tôi vừa tỉnh dậy sau giấc mơ nơi bạn và tôi phải nói lời tạm biệt
-(0:18.12 - 0:23.50): and I don't know what it all means | Vietnamese: và tôi không biết tất cả điều này có nghĩa là gì
-(0:23.50 - 0:28.05): but since I survived I realized | Vietnamese: nhưng từ khi tôi sống sót tôi mới nhận ra
-
-Raw transcript data:
-${userRawText}
-
-Analyze carefully and return the list of segmented sentences in JSON format.`;
-
-          const response = await ai.models.generateContent({
-            model: "gemini-2.0-flash",
-            contents: prompt,
-            config: {
-              responseMimeType: "application/json",
-              responseSchema: {
-                type: Type.ARRAY,
-                description: "Danh sách các câu đã được phân đoạn hoàn chỉnh",
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    sentence: {
-                      type: Type.STRING,
-                      description: "Câu thoại hoàn chỉnh, viết hoa đầu dòng và có dấu câu phù hợp.",
-                    },
-                    vietnamese: {
-                      type: Type.STRING,
-                      description: "Bản dịch nghĩa tiếng Việt chuẩn xác và tự nhiên của câu.",
-                    },
-                    start: {
-                      type: Type.NUMBER,
-                      description: "Thời gian bắt đầu câu nói (giây), ước lượng tăng dần liên tục.",
-                    },
-                    end: {
-                      type: Type.NUMBER,
-                      description: "Thời gian kết thúc câu nói (giây), bằng thời gian bắt đầu câu tiếp theo.",
-                    },
-                  },
-                  required: ["sentence", "start", "end"],
-                },
-              },
-            },
-          });
-
-          const text = response.text;
-          if (text) {
-            const parsed = safeParseJsonText(text);
-            const finalSentences = parsed.map((s: any, idx: number) => ({
-              id: idx + 1,
-              sentence: s.sentence.trim(),
-              start: Number(Number(s.start).toFixed(2)),
-              end: Number(Number(s.end).toFixed(2)),
-              ...(s.vietnamese ? { vietnamese: s.vietnamese.trim() } : {}),
-            }));
-
-            res.json({
-              videoId,
-              title: videoTitle,
-              author: authorName,
-              thumbnailUrl,
-              language: "en",
-              sentences: finalSentences,
-              geminiEnhanced: true,
-              isRestored: false,
-              isManualText: true
-            });
-            return;
-          }
-        } catch (err: any) {
-          console.warn(`${LOG_KEY} Raw text Gemini processing failed (${err?.message}). Falling back to local parsed sentences.`);
-        }
-
-        // Return local parsed sentences on Gemini API quota/network failure
+        console.log(`Parsed ${localSentences.length} sentences locally.`);
         res.json({
           videoId,
           title: videoTitle,
@@ -523,7 +314,7 @@ Analyze carefully and return the list of segmented sentences in JSON format.`;
         watchSuccess = true;
       } else {
         res.status(400).json({
-          error: "Không thể tìm thấy thông tin phụ đề trong đoạn mã nguồn HTML bạn đã dán. Hãy đảm bảo bạn đã mở đúng trang xem video chính thức trên YouTube (không phải Shorts hay danh sách phát), nhấn Ctrl+U và sao chép toàn bộ mã nguồn."
+          error: "Không thể tìm thấy thông tin phụ đề trong đoạn mã nguồn HTML bạn đã dán. Hãy đảm bảo bạn đã mở đúng trang xem video chính thức trên YouTube, nhấn Ctrl+U và sao chép toàn bộ mã nguồn."
         });
         return;
       }
@@ -551,7 +342,6 @@ Analyze carefully and return the list of segmented sentences in JSON format.`;
     }
 
     if (watchSuccess && captionTracks && captionTracks.length > 0) {
-      // Prioritize Vietnamese (vi) first, then English (en), then whatever language is first
       let selectedTrack = captionTracks.find((track) => track.languageCode === "vi");
       if (!selectedTrack) {
         selectedTrack = captionTracks.find((track) => track.languageCode === "en");
@@ -570,146 +360,31 @@ Analyze carefully and return the list of segmented sentences in JSON format.`;
           const rawSegments = parseXmlTranscript(transcriptXml);
 
           if (rawSegments.length > 0) {
-            // Proceed to standard Gemini segmentation if AI is configured, else basic mapping
-            if (ai) {
-              // Chunk transcription to prevent hitting token limits and make request faster
-              const chunkSize = 50;
-              const chunks: Array<typeof rawSegments> = [];
-              for (let i = 0; i < rawSegments.length; i += chunkSize) {
-                chunks.push(rawSegments.slice(i, i + chunkSize));
-              }
+            const basicSentences = mergeRawSegmentsLocally(rawSegments).map((seg, idx) => ({
+              id: idx + 1,
+              sentence: seg.sentence,
+              start: seg.start,
+              end: seg.end,
+            }));
 
-              const segmentPromises = chunks.map(async (chunk, chunkIdx) => {
-                try {
-                  const prompt = `You are an expert English linguist and dictation tutor. Please segment, fix capitalization, and add proper punctuation for the raw YouTube subtitle segments below.
-
-Important Rules:
-1. SEGMENT SENTENCES: Each segment MUST be 3 to 8 seconds long (max 6 - 12 words). IF A SENTENCE IS TOO LONG or contains compound clauses connected by "where", "and", "but", "so", "because", "when", etc. -> YOU MUST SPLIT THEM INTO SEPARATE SHORT CLAUSES for dictation practice.
-2. PRECISE INDIVIDUAL TIMESTAMPS (DETAILED TO MILLISECONDS):
-   - Each segment's "start" and "end" timestamps MUST match exactly when the lyrics or spoken words are actually delivered in the audio.
-   - Timestamps do NOT need to be continuous or adjoin back-to-back; natural pauses, gaps, or instrumental breaks between sentences should be preserved.
-   - "start": Start time (in seconds) precise to milliseconds (decimal number such as 10.45, 14.82...) of the first raw segment belonging to this clause.
-   - "end": End time (in seconds) precise to milliseconds (calculated as start + duration of the last raw segment, decimal number such as 18.37...).
-   - ABSOLUTELY DO NOT round to whole seconds or ending with .00 (such as 10.00 or 18.00).
-3. KEEP ORIGINAL ENGLISH TEXT: Do not translate sentence to Vietnamese, preserve original English (only add proper punctuation and capitalization).
-4. PRESERVE ORIGINAL WORDS: Do not alter words from the original spoken text.
-
-Standard Output Format Example:
-(0:10.45 - 0:18.12): I just woke up from my dream where you and I had to say goodbye
-(0:18.12 - 0:23.50): and I don't know what it all means
-(0:23.50 - 0:28.05): but since I survived I realized
-
-Raw subtitle data (JSON format):
-${JSON.stringify(chunk, null, 2)}
-
-Analyze and return the exact list of segmented sentences in JSON format.`;
-
-                  const response = await ai.models.generateContent({
-                    model: "gemini-2.0-flash",
-                    contents: prompt,
-                    config: {
-                      responseMimeType: "application/json",
-                      responseSchema: {
-                        type: Type.ARRAY,
-                        description: "Danh sách các câu đã được phân đoạn hoàn chỉnh",
-                        items: {
-                          type: Type.OBJECT,
-                          properties: {
-                            sentence: {
-                              type: Type.STRING,
-                              description: "Câu hoàn chỉnh, được viết hoa đầu dòng và có dấu câu phù hợp.",
-                            },
-                            start: {
-                              type: Type.NUMBER,
-                              description: "Thời gian bắt đầu câu nói (giây), lấy chính xác từ start của phân đoạn phụ đề thô đầu tiên.",
-                            },
-                            end: {
-                              type: Type.NUMBER,
-                              description: "Thời gian kết thúc câu nói (giây), bằng start + duration của phân đoạn phụ đề thô cuối cùng.",
-                            },
-                          },
-                          required: ["sentence", "start", "end"],
-                        },
-                      },
-                    },
-                  });
-
-                  const text = response.text;
-                  if (!text) return [];
-                  const parsed = safeParseJsonText(text);
-                  return Array.isArray(parsed) ? parsed : [];
-                } catch (err) {
-                  console.error(`Error processing chunk ${chunkIdx}:`, err);
-                  // Fallback for this chunk: map individually
-                  return chunk.map((c) => ({
-                    sentence: c.text,
-                    start: c.start,
-                    end: c.start + c.duration,
-                  }));
-                }
-              });
-
-              const results = await Promise.all(segmentPromises);
-              const mergedSentences = results.flat();
-
-              // Sort by start time and assign simple sequential IDs
-              const finalSentences = mergedSentences
-                .filter((s) => s && s.sentence && typeof s.start === "number" && typeof s.end === "number")
-                .sort((a, b) => a.start - b.start)
-                .map((s, idx) => ({
-                  id: idx + 1,
-                  sentence: s.sentence.trim(),
-                  start: Number(s.start.toFixed(2)),
-                  end: Number(s.end.toFixed(2)),
-                }));
-
-              const fallbackMergedSentences = mergeRawSegmentsLocally(rawSegments).map((seg, idx) => ({
-                id: idx + 1,
-                sentence: seg.sentence,
-                start: seg.start,
-                end: seg.end,
-              }));
-
-              res.json({
-                videoId,
-                title: videoTitle,
-                author: authorName,
-                thumbnailUrl,
-                language: selectedLanguage,
-                sentences: finalSentences.length > 0 ? finalSentences : fallbackMergedSentences,
-                geminiEnhanced: finalSentences.length > 0,
-                isRestored: false,
-              });
-              return;
-            } else {
-              console.warn("Gemini API key is not configured. Grouping basic YouTube subtitle segments locally.");
-              const basicSentences = mergeRawSegmentsLocally(rawSegments).map((seg, idx) => ({
-                id: idx + 1,
-                sentence: seg.sentence,
-                start: seg.start,
-                end: seg.end,
-              }));
-
-              res.json({
-                videoId,
-                title: videoTitle,
-                author: authorName,
-                thumbnailUrl,
-                language: selectedLanguage,
-                sentences: basicSentences,
-                geminiEnhanced: false,
-                isRestored: false,
-              });
-              return;
-            }
+            res.json({
+              videoId,
+              title: videoTitle,
+              author: authorName,
+              thumbnailUrl,
+              language: selectedLanguage,
+              sentences: basicSentences,
+              geminiEnhanced: false,
+              isRestored: false,
+            });
+            return;
           }
         }
       } catch (transcriptError) {
-        console.warn("Failed to retrieve or parse raw subtitles, falling back to restoration:", transcriptError);
+        console.warn("Failed to retrieve or parse raw subtitles:", transcriptError);
       }
     }
 
-    // FALLBACK: YouTube watch page was blocked or had no subtitles.
     res.status(404).json({
       error: "Không thể lấy phụ đề tự động từ YouTube. Vui lòng sử dụng tính năng dán văn bản phụ đề thủ công."
     });
@@ -720,7 +395,7 @@ Analyze and return the exact list of segmented sentences in JSON format.`;
   }
 });
 
-// Fast Feedback evaluation endpoint (No Gemini API required)
+// Fast Feedback evaluation endpoint (100% Local String Comparison)
 app.post("/api/evaluate", async (req, res) => {
   try {
     const { original, input } = req.body;
@@ -784,68 +459,7 @@ app.post("/api/evaluate", async (req, res) => {
   }
 });
 
-// Appwrite Vocabulary Sync Endpoints
-app.post("/api/vocabulary/lookup-ai", async (req, res) => {
-  try {
-    const { word, contextSentence } = req.body;
-    if (!word || !word.trim()) {
-      res.status(400).json({ error: "Vui lòng nhập từ vựng cần tra cứu." });
-      return;
-    }
-
-    if (!ai) {
-      console.warn(`${LOG_KEY} Vocabulary lookup failed: GEMINI_API_KEY is not set.`);
-      res.status(400).json({ error: "Thiếu cấu hình Gemini API Key." });
-      return;
-    }
-
-    console.log(`${LOG_KEY} Requesting vocabulary lookup for "${word.trim()}" from Gemini API...`);
-
-    const prompt = `You are a professional English-Vietnamese dictionary. Analyze the following English vocabulary word and return detailed information in Vietnamese:
-Target Word: "${word.trim()}"
-${contextSentence ? `Context Sentence: "${contextSentence.trim()}"` : ""}
-
-Task:
-1. "vietnamese": Accurate, concise Vietnamese definition fitting the context.
-2. "grammar": Main part of speech (e.g., "noun", "verb", "adjective", "adverb", "phrase").
-3. "englishSentence": Example sentence in English (prefer using context sentence if provided, or generate a natural short example sentence).
-4. "vietnameseSentence": Fluent Vietnamese translation of the example sentence.
-
-Return data in exact JSON format.`;
-
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          required: ["vietnamese", "grammar", "englishSentence", "vietnameseSentence"],
-          properties: {
-            vietnamese: { type: Type.STRING },
-            grammar: { type: Type.STRING },
-            englishSentence: { type: Type.STRING },
-            vietnameseSentence: { type: Type.STRING },
-          },
-        },
-      },
-    });
-
-    const text = response.text;
-    if (!text) throw new Error("Gemini returned empty text for lookup");
-    console.log(`${LOG_KEY} Vocabulary lookup successful for "${word.trim()}".`);
-    res.json(safeParseJsonText(text));
-  } catch (error: any) {
-    console.error(`${LOG_KEY} Vocabulary lookup AI Error:`, {
-      message: error?.message,
-      status: error?.status,
-      code: error?.code,
-      stack: error?.stack,
-    });
-    res.status(500).json({ error: error.message || "Không thể tra cứu từ vựng bằng AI." });
-  }
-});
-
+// Appwrite Vocabulary Sync Endpoint
 app.post("/api/vocabulary/add-appwrite", async (req, res) => {
   try {
     const {
@@ -867,7 +481,6 @@ app.post("/api/vocabulary/add-appwrite", async (req, res) => {
     const APPWRITE_DATABASE_ID = "68cfb8c900053dca6f90";
     const APPWRITE_COLLECTION_ID = "vocabularies";
 
-    // Format sentences JSON string matching Appwrite schema
     const sentencesArr = [
       {
         sentences: englishSentence || "",

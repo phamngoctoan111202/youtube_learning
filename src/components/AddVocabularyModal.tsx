@@ -47,52 +47,7 @@ export default function AddVocabularyModal({
     }
   }, [isOpen, defaultWord, contextSentence]);
 
-  // Handle AI Auto lookup (Phân tích nghĩa & ví dụ bằng Gemini)
-  const handleAiLookup = async () => {
-    if (!word.trim()) {
-      setStatusMessage({ type: "error", text: "Vui lòng nhập từ vựng trước khi gọi AI." });
-      return;
-    }
 
-    setIsLookingUp(true);
-    setStatusMessage(null);
-
-    try {
-      const res = await fetch("/api/vocabulary/lookup-ai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          word: word.trim(),
-          contextSentence: englishSentence || contextSentence
-        })
-      });
-
-      const resText = await res.text();
-      let data: any;
-      try {
-        data = JSON.parse(resText);
-      } catch (e) {
-        console.error("Non-JSON response from /api/vocabulary/lookup-ai:", resText);
-        throw new Error("Máy chủ phản hồi định dạng không hợp lệ. Vui lòng thử lại sau giây lát.");
-      }
-
-      if (!res.ok) {
-        throw new Error(data.error || "Không thể phân tích từ bằng AI.");
-      }
-
-      setVietnamese(data.vietnamese || "");
-      setGrammar(data.grammar || "noun");
-      if (data.englishSentence) setEnglishSentence(data.englishSentence);
-      if (data.vietnameseSentence) setVietnameseSentence(data.vietnameseSentence);
-      
-      setStatusMessage({ type: "success", text: "AI Gemini đã tự động hoàn thiện nghĩa & phát âm!" });
-    } catch (err: any) {
-      console.error(err);
-      setStatusMessage({ type: "error", text: err.message || "Lỗi tra cứu từ vựng bằng AI." });
-    } finally {
-      setIsLookingUp(false);
-    }
-  };
 
   // Submit to Appwrite
   const handleSubmit = async (e: React.FormEvent) => {
@@ -172,21 +127,9 @@ export default function AddVocabularyModal({
             
             {/* Word Input + AI Lookup */}
             <div className="flex flex-col gap-1.5">
-              <div className="flex justify-between items-center">
-                <label className="text-xs font-bold text-slate-700 font-display uppercase tracking-wider">
-                  Từ vựng Tiếng Anh <span className="text-rose-500">*</span>:
-                </label>
-                <button
-                  type="button"
-                  onClick={handleAiLookup}
-                  disabled={isLookingUp || !word.trim()}
-                  className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 text-xs font-bold rounded-lg transition-all active:scale-95 disabled:opacity-50"
-                  title="Nhờ AI Gemini tự động gợi ý nghĩa, từ loại và câu dịch"
-                >
-                  {isLookingUp ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} className="text-amber-500" />}
-                  <span>{isLookingUp ? "Đang tra..." : "AI Điền Tự Động"}</span>
-                </button>
-              </div>
+              <label className="text-xs font-bold text-slate-700 font-display uppercase tracking-wider">
+                Từ vựng Tiếng Anh <span className="text-rose-500">*</span>:
+              </label>
 
               <input
                 type="text"

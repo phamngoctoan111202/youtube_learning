@@ -756,7 +756,7 @@ Standard Output Format Example:
                           }`}
                         >
                           {isCopied ? <Check size={12} /> : <Clipboard size={12} />}
-                          <span>{isCopied ? "Đã sao chép" : "Copy mẫu Prompt cho Gemini"}</span>
+                          <span>{isCopied ? "Đã sao chép" : "Copy định dạng mẫu"}</span>
                         </button>
                       </div>
                       <textarea
