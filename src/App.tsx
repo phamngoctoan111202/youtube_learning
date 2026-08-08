@@ -1051,17 +1051,29 @@ Standard Output Format Example:
                 </div>
 
                 {/* Optional Preview Translation Before Answering */}
-                {showTranslationBefore && sentences[currentIndex]?.vietnamese && (
-                  <div className="bg-indigo-50/95 border border-indigo-200/90 rounded-lg p-2.5 text-xs text-indigo-950 shadow-xs flex items-start gap-2">
-                    <Languages size={15} className="text-indigo-600 shrink-0 mt-0.5" />
-                    <div className="min-w-0 flex-1">
-                      <span className="font-bold text-indigo-900 text-[10px] uppercase font-mono tracking-wider block">
-                        Bản dịch Tiếng Việt (Xem trước):
-                      </span>
-                      <p className="font-semibold text-indigo-950 text-xs mt-0.5 leading-snug">
-                        "{sentences[currentIndex].vietnamese}"
-                      </p>
+                {showTranslationBefore && (
+                  <div className="bg-indigo-50/95 border border-indigo-200/90 rounded-lg p-2.5 text-xs text-indigo-950 shadow-xs flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2 min-w-0 flex-1">
+                      <Languages size={15} className="text-indigo-600 shrink-0 mt-0.5" />
+                      <div className="min-w-0 flex-1">
+                        <span className="font-bold text-indigo-900 text-[10px] uppercase font-mono tracking-wider block">
+                          Bản dịch Tiếng Việt:
+                        </span>
+                        <p className="font-semibold text-indigo-950 text-xs mt-0.5 leading-snug">
+                          {sentences[currentIndex]?.vietnamese ? `"${sentences[currentIndex].vietnamese}"` : <span className="italic text-slate-400">Chưa có bản dịch</span>}
+                        </p>
+                      </div>
                     </div>
+                    {sentences[currentIndex] && (
+                      <button
+                        onClick={(e) => handleOpenEditSentence(sentences[currentIndex], e)}
+                        className="px-2 py-1 bg-white hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-md text-[10px] font-bold flex items-center gap-1 shrink-0 cursor-pointer"
+                        title="Sửa bản dịch tiếng Việt"
+                      >
+                        <Edit3 size={11} />
+                        <span>Sửa dịch</span>
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -1415,17 +1427,29 @@ Standard Output Format Example:
                   )}
 
                   {/* Preview Translation Before Answering */}
-                  {showTranslationBefore && sentences[currentIndex]?.vietnamese && (
-                    <div className="bg-indigo-50/95 border-2 border-indigo-200/90 rounded-2xl p-4 text-xs text-indigo-950 shadow-sm flex items-start gap-3">
-                      <Languages size={18} className="text-indigo-600 shrink-0 mt-0.5" />
-                      <div className="min-w-0 flex-1">
-                        <span className="font-bold text-indigo-900 text-xs uppercase font-mono tracking-wider block mb-0.5">
-                          Bản dịch Tiếng Việt (Chế độ hiện trước):
-                        </span>
-                        <p className="font-semibold text-indigo-950 text-base leading-relaxed">
-                          "{sentences[currentIndex].vietnamese}"
-                        </p>
+                  {showTranslationBefore && (
+                    <div className="bg-indigo-50/95 border-2 border-indigo-200/90 rounded-2xl p-4 text-xs text-indigo-950 shadow-sm flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        <Languages size={18} className="text-indigo-600 shrink-0 mt-0.5" />
+                        <div className="min-w-0 flex-1">
+                          <span className="font-bold text-indigo-900 text-xs uppercase font-mono tracking-wider block mb-0.5">
+                            Bản dịch Tiếng Việt:
+                          </span>
+                          <p className="font-semibold text-indigo-950 text-base leading-relaxed">
+                            {sentences[currentIndex]?.vietnamese ? `"${sentences[currentIndex].vietnamese}"` : <span className="italic text-slate-400">Chưa có bản dịch</span>}
+                          </p>
+                        </div>
                       </div>
+                      {sentences[currentIndex] && (
+                        <button
+                          onClick={(e) => handleOpenEditSentence(sentences[currentIndex], e)}
+                          className="px-2.5 py-1.5 bg-white hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs transition-all"
+                          title="Sửa bản dịch tiếng Việt"
+                        >
+                          <Edit3 size={13} />
+                          <span>Sửa dịch</span>
+                        </button>
+                      )}
                     </div>
                   )}
 

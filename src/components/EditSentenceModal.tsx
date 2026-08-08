@@ -19,12 +19,14 @@ export default function EditSentenceModal({
   onTestPlay,
 }: EditSentenceModalProps) {
   const [text, setText] = useState("");
+  const [vietnamese, setVietnamese] = useState("");
   const [start, setStart] = useState<number>(0);
   const [end, setEnd] = useState<number>(0);
 
   useEffect(() => {
     if (sentence) {
       setText(sentence.sentence);
+      setVietnamese(sentence.vietnamese || "");
       setStart(Number(sentence.start.toFixed(2)));
       setEnd(Number(sentence.end.toFixed(2)));
     }
@@ -45,6 +47,7 @@ export default function EditSentenceModal({
     onSave({
       ...sentence,
       sentence: text.trim(),
+      vietnamese: vietnamese.trim() || undefined,
       start: Math.max(0, start),
       end: Math.max(start + 0.1, end),
     });
@@ -58,7 +61,7 @@ export default function EditSentenceModal({
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
-          className="bg-white border-2 border-slate-200 rounded-3xl p-6 max-w-lg w-full shadow-2xl relative flex flex-col gap-5 overflow-hidden"
+          className="bg-white border-2 border-slate-200 rounded-3xl p-6 max-w-lg w-full shadow-2xl relative flex flex-col gap-5 overflow-hidden max-h-[90vh] overflow-y-auto"
         >
           {/* Top Header */}
           <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
@@ -71,7 +74,7 @@ export default function EditSentenceModal({
                   Chỉnh sửa Câu #{sentence.id}
                 </h3>
                 <p className="text-slate-400 text-xs font-medium">
-                  Tùy chỉnh nội dung câu và mốc thời gian phát audio
+                  Tùy chỉnh nội dung câu, bản dịch và mốc thời gian phát audio
                 </p>
               </div>
             </div>
@@ -89,14 +92,28 @@ export default function EditSentenceModal({
             {/* Sentence Text Input */}
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-slate-600 uppercase tracking-wider font-display">
-                Nội dung lời thoại:
+                Nội dung lời thoại (Tiếng Anh):
               </label>
               <textarea
-                rows={3}
+                rows={2}
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 className="w-full p-3 bg-slate-50 border-2 border-slate-200 focus:border-blue-500 focus:bg-white rounded-xl text-slate-800 outline-none text-xs sm:text-sm font-medium leading-relaxed resize-none transition-all"
                 placeholder="Nhập nội dung chuẩn của câu..."
+              />
+            </div>
+
+            {/* Vietnamese Translation Input */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-slate-600 uppercase tracking-wider font-display">
+                Bản dịch Tiếng Việt (Tùy chọn):
+              </label>
+              <textarea
+                rows={2}
+                value={vietnamese}
+                onChange={(e) => setVietnamese(e.target.value)}
+                className="w-full p-3 bg-indigo-50/50 border-2 border-indigo-100 focus:border-indigo-500 focus:bg-white rounded-xl text-slate-800 outline-none text-xs sm:text-sm font-medium leading-relaxed resize-none transition-all"
+                placeholder="Nhập bản dịch tiếng Việt cho câu này..."
               />
             </div>
 
@@ -168,6 +185,7 @@ export default function EditSentenceModal({
                 onSave({
                   ...sentence,
                   sentence: text.trim(),
+                  vietnamese: vietnamese.trim() || undefined,
                   start: Math.max(0, start),
                   end: Math.max(start + 0.1, end),
                 });
