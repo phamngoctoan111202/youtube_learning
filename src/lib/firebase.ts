@@ -13,14 +13,15 @@ import {
 } from "firebase/firestore";
 import { Sentence, VideoDetails } from "../types";
 
-// Firebase Configuration from environment variables or sensible defaults
+// Firebase Configuration for dictation-8c994 project
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDemoPlaceholderKeyForFirebaseSync",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "youtube-dictation-learning.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "youtube-dictation-learning",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "youtube-dictation-learning.appspot.com",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "1234567890",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:1234567890:web:abcdef123456",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyCepe8hnVVvcW8TEahTD-6jRLQglFGVE2Q",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "dictation-8c994.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "dictation-8c994",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "dictation-8c994.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "176662728879",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:176662728879:web:2e5aa341980731617b045a",
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-BDM33LCRRH"
 };
 
 // Initialize Firebase App
