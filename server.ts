@@ -421,57 +421,120 @@ app.post("/api/evaluate", async (req, res) => {
       return;
     }
 
-    const cleanTextForComparison = (t: string) =>
-      (t || "")
+    const cleanWord = (w: string) =>
+      (w || "")
         .toLowerCase()
         .replace(/[’‘`´]/g, "'")
         .replace(/[“”]/g, '"')
         .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'–—]/g, "")
-        .replace(/\s+/g, " ")
         .trim();
 
     const normOriginal = (original || "").replace(/\s+/g, " ").trim();
     const normInput = (input || "").replace(/\s+/g, " ").trim();
-    const cleanOrig = cleanTextForComparison(normOriginal);
-    const cleanUser = cleanTextForComparison(normInput);
-
     let vietnameseTranslation = req.body.vietnamese;
 
-    // Fast-track exact match (ignoring whitespace, punctuation & casing)
-    if (cleanOrig === cleanUser) {
+    if (!normInput) {
+      const rawOWords = normOriginal.split(/\s+/).filter(Boolean);
+      const corrections = rawOWords.map((w, idx) => ({
+        type: "missing",
+        expected: w,
+        position: idx + 1,
+        reason: `Thiếu từ "${w}" (chưa nhập nội dung)`,
+      }));
       res.json({
-        accuracy: 100,
-        feedback: "Xuất sắc! Bạn chép hoàn toàn chính xác.",
+        accuracy: 0,
+        feedback: "Bạn chưa nhập nội dung trả lời.",
         vietnameseTranslation,
-        corrections: [],
+        corrections,
       });
       return;
     }
 
-    const oWords = cleanOrig.split(" ").filter(Boolean);
-    const iWords = cleanUser.split(" ").filter(Boolean);
+    const rawOWords = normOriginal.split(/\s+/).filter(Boolean);
+    const rawIWords = normInput.split(/\s+/).filter(Boolean);
 
-    let matched = 0;
-    const iWordsCopy = [...iWords];
-    for (const w of oWords) {
-      const idx = iWordsCopy.indexOf(w);
-      if (idx !== -1) {
-        matched++;
-        iWordsCopy.splice(idx, 1);
+    const oWords = rawOWords.map(cleanWord);
+    const iWords = rawIWords.map(cleanWord);
+
+    const m = oWords.length;
+    const n = iWords.length;
+
+    const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        if (oWords[i - 1] === iWords[j - 1]) {
+          dp[i][j] = dp[i - 1][j - 1] + 1;
+        } else {
+          dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+        }
       }
     }
-    const percent = oWords.length > 0 ? Math.round((matched / oWords.length) * 100) : 0;
+
+    let i = m;
+    let j = n;
+    const ops: Array<{ op: "match" | "missing" | "extra" | "different"; oIdx?: number; iIdx?: number }> = [];
+
+    while (i > 0 || j > 0) {
+      if (i > 0 && j > 0 && oWords[i - 1] === iWords[j - 1]) {
+        ops.unshift({ op: "match", oIdx: i - 1, iIdx: j - 1 });
+        i--;
+        j--;
+      } else if (i > 0 && j > 0 && dp[i - 1][j - 1] >= dp[i - 1][j] && dp[i - 1][j - 1] >= dp[i][j - 1]) {
+        ops.unshift({ op: "different", oIdx: i - 1, iIdx: j - 1 });
+        i--;
+        j--;
+      } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+        ops.unshift({ op: "extra", iIdx: j - 1 });
+        j--;
+      } else {
+        ops.unshift({ op: "missing", oIdx: i - 1 });
+        i--;
+      }
+    }
+
+    const corrections: Array<{ type: string; word?: string; expected?: string; position?: number; reason: string }> = [];
+    let correctCount = 0;
+
+    for (const op of ops) {
+      if (op.op === "match") {
+        correctCount++;
+      } else if (op.op === "missing" && op.oIdx !== undefined) {
+        corrections.push({
+          type: "missing",
+          expected: rawOWords[op.oIdx],
+          position: op.oIdx + 1,
+          reason: `Bị thiếu từ "${rawOWords[op.oIdx]}" tại vị trí thứ ${op.oIdx + 1}`,
+        });
+      } else if (op.op === "extra" && op.iIdx !== undefined) {
+        corrections.push({
+          type: "extra",
+          word: rawIWords[op.iIdx],
+          position: op.iIdx + 1,
+          reason: `Thừa từ "${rawIWords[op.iIdx]}" (không có trong câu gốc)`,
+        });
+      } else if (op.op === "different" && op.oIdx !== undefined && op.iIdx !== undefined) {
+        corrections.push({
+          type: "different",
+          word: rawIWords[op.iIdx],
+          expected: rawOWords[op.oIdx],
+          position: op.oIdx + 1,
+          reason: `Khác từ tại vị trí thứ ${op.oIdx + 1}: Bạn gõ "${rawIWords[op.iIdx]}", từ đúng là "${rawOWords[op.oIdx]}"`,
+        });
+      }
+    }
+
+    const accuracy = m > 0 ? Math.max(0, Math.min(100, Math.round((correctCount / m) * 100))) : 0;
 
     let feedback = "Cố gắng lên nhé!";
-    if (percent >= 95) feedback = "Xuất sắc! Bạn chép hoàn toàn chính xác.";
-    else if (percent >= 80) feedback = "Rất tốt! Chỉ sai một vài lỗi nhỏ.";
-    else if (percent >= 50) feedback = "Tốt! Cần chú ý kỹ hơn các từ khó.";
+    if (accuracy >= 100) feedback = "Xuất sắc! Bạn chép hoàn toàn chính xác.";
+    else if (accuracy >= 80) feedback = "Rất tốt! Chỉ sai một vài lỗi nhỏ.";
+    else if (accuracy >= 50) feedback = "Tốt! Cần chú ý kỹ hơn các từ khó.";
 
     res.json({
-      accuracy: percent,
+      accuracy,
       feedback,
       vietnameseTranslation,
-      corrections: [],
+      corrections,
     });
   } catch (error: any) {
     res.status(500).json({ error: "Không thể đánh giá kết quả." });

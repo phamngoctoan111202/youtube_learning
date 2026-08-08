@@ -172,11 +172,15 @@ export default function FeedbackCard({ result, isEvaluating, onRetry, currentSen
               >
                 <div className="mt-0.5">
                   {corr.type === "missing" ? (
-                    <span className="w-4 h-4 rounded-full bg-amber-100 text-amber-600 border border-amber-200 flex items-center justify-center font-bold text-xs font-mono">
+                    <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 flex items-center justify-center font-bold text-xs font-mono">
                       !
                     </span>
+                  ) : corr.type === "extra" ? (
+                    <span className="w-5 h-5 rounded-full bg-purple-100 text-purple-700 border border-purple-200 flex items-center justify-center font-bold text-xs font-mono">
+                      +
+                    </span>
                   ) : (
-                    <span className="w-4 h-4 rounded-full bg-rose-100 text-rose-600 border border-rose-200 flex items-center justify-center font-bold text-xs font-mono">
+                    <span className="w-5 h-5 rounded-full bg-rose-100 text-rose-600 border border-rose-200 flex items-center justify-center font-bold text-xs font-mono">
                       ×
                     </span>
                   )}
@@ -184,31 +188,45 @@ export default function FeedbackCard({ result, isEvaluating, onRetry, currentSen
 
                 <div className="flex-1">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider font-mono">
+                    <span className={`text-[10px] uppercase font-extrabold tracking-wider font-mono px-2 py-0.5 rounded border ${
+                      corr.type === "missing"
+                        ? "bg-amber-50 text-amber-700 border-amber-200"
+                        : corr.type === "extra"
+                        ? "bg-purple-50 text-purple-700 border-purple-200"
+                        : corr.type === "different"
+                        ? "bg-rose-50 text-rose-700 border-rose-200"
+                        : "bg-slate-50 text-slate-700 border-slate-200"
+                    }`}>
                       {corr.type === "missing"
                         ? "Thiếu từ"
-                        : corr.type === "spelling"
-                        ? "Chính tả"
+                        : corr.type === "extra"
+                        ? "Thừa từ"
+                        : corr.type === "different"
+                        ? "Khác từ tại vị trí"
                         : "Sai từ"}
                     </span>
                   </div>
 
-                  <div className="mt-1">
+                  <div className="mt-1.5 text-xs sm:text-sm">
                     {corr.type === "missing" ? (
                       <p className="text-slate-700">
-                        Cần có thêm từ: <strong className="text-amber-600 font-bold font-mono">"{corr.expected}"</strong>
+                        Bị thiếu từ: <strong className="text-amber-600 font-bold font-mono">"{corr.expected}"</strong>
+                      </p>
+                    ) : corr.type === "extra" ? (
+                      <p className="text-slate-700">
+                        Thừa từ dư: <span className="text-purple-600 font-bold font-mono line-through decoration-2">"{corr.word}"</span>
                       </p>
                     ) : (
                       <p className="text-slate-700 leading-relaxed">
-                        Nhầm <span className="text-rose-500 line-through decoration-2">"{corr.word || "(khoảng trống)"}"</span> thành{" "}
+                        Khác từ: <span className="text-rose-500 line-through decoration-2 font-bold font-mono">"{corr.word || "(khoảng trống)"}"</span> → Từ đúng:{" "}
                         <strong className="text-emerald-600 font-bold font-mono">"{corr.expected}"</strong>
                       </p>
                     )}
                   </div>
 
                   {corr.reason && (
-                    <div className="mt-2 pt-2 border-t border-slate-100 text-xs text-slate-600 font-medium leading-relaxed bg-slate-50 p-2.5 rounded-xl border border-slate-200/50">
-                      <span className="font-bold text-slate-800">💡 Lý do: </span>
+                    <div className="mt-2 pt-2 border-t border-slate-100 text-xs text-slate-600 font-medium leading-relaxed bg-slate-50 p-2 rounded-xl border border-slate-200/50">
+                      <span className="font-bold text-slate-800">💡 Chi tiết: </span>
                       {corr.reason}
                     </div>
                   )}
