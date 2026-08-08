@@ -334,6 +334,8 @@ class EmbeddedServer(
 
         val cleanTextForComparison = { t: String ->
             t.lowercase()
+                .replace(Regex("[’‘`´]"), "'")
+                .replace(Regex("[“”]"), "\"")
                 .replace(Regex("[.,/#!\$%^&*;:{}=\\-_`~()?\"'–—]"), "")
                 .replace(Regex("\\s+"), " ")
                 .trim()

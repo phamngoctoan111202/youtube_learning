@@ -504,6 +504,8 @@ export default function App() {
       const clean = (t: string) =>
         (t || "")
           .toLowerCase()
+          .replace(/[’‘`´]/g, "'")
+          .replace(/[“”]/g, '"')
           .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'–—]/g, "")
           .replace(/\s+/g, " ")
           .trim();

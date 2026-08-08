@@ -406,6 +406,8 @@ app.post("/api/evaluate", async (req, res) => {
     const cleanTextForComparison = (t: string) =>
       (t || "")
         .toLowerCase()
+        .replace(/[’‘`´]/g, "'")
+        .replace(/[“”]/g, '"')
         .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'–—]/g, "")
         .replace(/\s+/g, " ")
         .trim();
