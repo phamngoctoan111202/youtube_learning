@@ -545,6 +545,74 @@ export default function App() {
     }
   };
 
+  // Upload & Overwrite current lesson or history to Firebase Firestore
+  const handleUploadToFirebase = async (targetVideoId?: string) => {
+    const vid = targetVideoId || videoDetails?.videoId;
+    if (!vid) {
+      alert("Vui lòng mở bài học hoặc chọn bài trong lịch sử để đẩy lên Firebase.");
+      return;
+    }
+    const currentSentences = targetVideoId && targetVideoId !== videoDetails?.videoId
+      ? (history.find(h => h.videoId === targetVideoId)?.sentences || [])
+      : sentences;
+
+    if (!currentSentences || currentSentences.length === 0) {
+      alert("Không tìm thấy dữ liệu câu thoại để đẩy lên.");
+      return;
+    }
+
+    const currentDetails = targetVideoId && targetVideoId !== videoDetails?.videoId
+      ? (history.find(h => h.videoId === targetVideoId)?.videoDetails || null)
+      : videoDetails;
+
+    setIsLoading(true);
+    const success = await saveVideoToFirestore(vid, currentDetails, currentSentences);
+    setIsLoading(false);
+
+    if (success) {
+      alert(`Đã đẩy lên và ghi đè bài học (${currentSentences.length} câu) thành công lên Firebase Firestore!`);
+    } else {
+      alert("Không thể lưu bài học lên Firebase Firestore. Vui lòng kiểm tra lại cấu hình hoặc kết nối mạng.");
+    }
+  };
+
+  // Download & Restore lessons from Firebase Firestore
+  const handleDownloadFromFirebase = async () => {
+    setIsLoading(true);
+    const firestoreLessons = await getAllVideosFromFirestore();
+    setIsLoading(false);
+
+    if (firestoreLessons.length > 0) {
+      const cloudHistory = firestoreLessons.map((item) => ({
+        videoId: item.videoId,
+        title: item.title,
+        date: new Date(item.updatedAt).toLocaleDateString("vi-VN"),
+        sentences: item.sentences,
+        videoDetails: {
+          videoId: item.videoId,
+          title: item.title,
+          author: item.author,
+          thumbnailUrl: item.thumbnailUrl,
+        },
+      }));
+      setHistory(cloudHistory);
+      try {
+        localStorage.setItem("youtube_dictation_history", JSON.stringify(cloudHistory));
+      } catch (e) {}
+
+      // If current active video exists in Cloud, update local sentences
+      if (videoDetails?.videoId) {
+        const match = firestoreLessons.find((f) => f.videoId === videoDetails.videoId);
+        if (match && match.sentences && match.sentences.length > 0) {
+          setSentences(match.sentences);
+        }
+      }
+      alert(`Đã tải thành công ${firestoreLessons.length} bài học từ Firebase Firestore về thiết bị!`);
+    } else {
+      alert("Chưa có bài học nào được lưu trên Firebase Firestore.");
+    }
+  };
+
   // Play current segment
   const triggerPlay = () => {
     setPlayTrigger((prev) => prev + 1);
@@ -1114,40 +1182,25 @@ Standard Output Format Example:
                       </h3>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <button
                         type="button"
-                        onClick={async () => {
-                          setIsLoading(true);
-                          const firestoreLessons = await getAllVideosFromFirestore();
-                          setIsLoading(false);
-                          if (firestoreLessons.length > 0) {
-                            const cloudHistory = firestoreLessons.map((item) => ({
-                              videoId: item.videoId,
-                              title: item.title,
-                              date: new Date(item.updatedAt).toLocaleDateString("vi-VN"),
-                              sentences: item.sentences,
-                              videoDetails: {
-                                videoId: item.videoId,
-                                title: item.title,
-                                author: item.author,
-                                thumbnailUrl: item.thumbnailUrl,
-                              },
-                            }));
-                            setHistory(cloudHistory);
-                            try {
-                              localStorage.setItem("youtube_dictation_history", JSON.stringify(cloudHistory));
-                            } catch (e) {}
-                            alert(`Đã đồng bộ thành công ${firestoreLessons.length} bài học từ Firebase Firestore!`);
-                          } else {
-                            alert("Chưa có bài học nào được lưu trên Firebase Firestore.");
-                          }
-                        }}
-                        className="flex items-center gap-1 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs"
-                        title="Tải toàn bộ bài học lưu trên Firebase Firestore"
+                        onClick={() => handleUploadToFirebase()}
+                        className="flex items-center gap-1 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                        title="Ghi đè bài học hiện tại lên Firebase Firestore"
                       >
-                        <Flame size={13} className="fill-amber-500 text-amber-500" />
-                        <span>Tải từ Firestore</span>
+                        <CloudUpload size={13} className="text-amber-600" />
+                        <span>Đẩy lên Firebase (Ghi đè)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleDownloadFromFirebase}
+                        className="flex items-center gap-1 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                        title="Tải toàn bộ bài học từ Firebase Firestore về thiết bị"
+                      >
+                        <CloudDownload size={13} className="text-blue-600" />
+                        <span>Tải từ Firebase về</span>
                       </button>
 
                       <button
@@ -1334,6 +1387,27 @@ Standard Output Format Example:
                     >
                       <BookmarkPlus size={11} className="text-indigo-600" />
                       <span>Từ vựng</span>
+                    </button>
+
+                    {/* Firebase Cloud Sync buttons inside dictation card */}
+                    <button
+                      type="button"
+                      onClick={() => handleUploadToFirebase()}
+                      className="flex items-center gap-1 px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-[10px] font-bold cursor-pointer transition-all"
+                      title="Ghi đè bài học này lên Firebase Firestore"
+                    >
+                      <CloudUpload size={11} className="text-amber-600" />
+                      <span>Đẩy Firebase</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleDownloadFromFirebase}
+                      className="flex items-center gap-1 px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-lg text-[10px] font-bold cursor-pointer transition-all"
+                      title="Tải bài học từ Firebase Firestore về"
+                    >
+                      <CloudDownload size={11} className="text-blue-600" />
+                      <span>Tải Firebase</span>
                     </button>
                   </div>
                 </div>
