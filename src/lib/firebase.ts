@@ -40,6 +40,7 @@ export interface FirestoreVideoLesson {
   sentenceCount: number;
   updatedAt: string;
   createdAt: string;
+  completionCount?: number;
 }
 
 /**
@@ -48,7 +49,8 @@ export interface FirestoreVideoLesson {
 export async function saveVideoToFirestore(
   videoId: string,
   videoDetails: VideoDetails | null,
-  sentences: Sentence[]
+  sentences: Sentence[],
+  completionCount?: number
 ): Promise<boolean> {
   if (!videoId || !sentences || sentences.length === 0) return false;
 
@@ -73,6 +75,7 @@ export async function saveVideoToFirestore(
       sentenceCount: sentences.length,
       updatedAt: now,
       createdAt: now,
+      ...(completionCount !== undefined ? { completionCount } : {}),
     };
 
     // Use setDoc with merge: true so existing metadata like createdAt is preserved

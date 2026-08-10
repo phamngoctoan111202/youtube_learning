@@ -103,6 +103,8 @@ export default function App() {
   // Progress/History tracking (saved to localStorage)
   const [progress, setProgress] = useState<Record<number, number>>({}); // sentence id -> max accuracy scored
   const [history, setHistory] = useState<Array<{ videoId: string; title: string; date: string; sentences?: Sentence[]; videoDetails?: VideoDetails }>>([]);
+  const [completionCount, setCompletionCount] = useState<number>(0);
+  const [isCurrentRunCompleted, setIsCurrentRunCompleted] = useState<boolean>(false);
 
   // Appwrite Add Vocabulary Modal states
   const [isVocabModalOpen, setIsVocabModalOpen] = useState(false);
@@ -372,13 +374,52 @@ export default function App() {
   useEffect(() => {
     if (videoDetails) {
       const savedProgress = localStorage.getItem(`progress_${videoDetails.videoId}`);
+      const savedCompletions = localStorage.getItem(`completion_count_${videoDetails.videoId}`);
+      const loadedCount = savedCompletions ? parseInt(savedCompletions, 10) : 0;
+      setCompletionCount(isNaN(loadedCount) ? 0 : loadedCount);
+
       if (savedProgress) {
-        setProgress(JSON.parse(savedProgress));
+        try {
+          const parsed = JSON.parse(savedProgress);
+          setProgress(parsed);
+        } catch (e) {
+          setProgress({});
+        }
       } else {
         setProgress({});
       }
+    } else {
+      setCompletionCount(0);
+      setIsCurrentRunCompleted(false);
     }
   }, [videoDetails]);
+
+  // Auto-detect when all sentences are completed for the current run
+  useEffect(() => {
+    if (!videoDetails || sentences.length === 0) return;
+
+    const completedSentencesCount = sentences.filter(
+      (s) => (progress[s.id] || 0) >= 90
+    ).length;
+
+    const isAllDone = completedSentencesCount === sentences.length;
+
+    if (isAllDone) {
+      if (!isCurrentRunCompleted) {
+        setIsCurrentRunCompleted(true);
+        setCompletionCount((prev) => {
+          const nextCount = prev + 1;
+          localStorage.setItem(`completion_count_${videoDetails.videoId}`, String(nextCount));
+          saveVideoToFirestore(videoDetails.videoId, videoDetails, sentences, nextCount);
+          return nextCount;
+        });
+      }
+    } else {
+      if (isCurrentRunCompleted) {
+        setIsCurrentRunCompleted(false);
+      }
+    }
+  }, [progress, sentences, videoDetails, isCurrentRunCompleted]);
 
   useEffect(() => {
     const savedHistory = localStorage.getItem("youtube_dictation_history");
@@ -914,9 +955,28 @@ export default function App() {
     handleSelectSentence(randIdx);
   };
 
+  const handleRedoVideo = () => {
+    if (videoDetails) {
+      localStorage.removeItem(`progress_${videoDetails.videoId}`);
+    }
+    setProgress({});
+    setCurrentIndex(0);
+    setUserInput("");
+    setEvaluationResult(null);
+    setIsCurrentRunCompleted(false);
+    setTimeout(() => {
+      if (isMobile) {
+        mobileTextareaRef.current?.focus();
+      } else {
+        desktopTextareaRef.current?.focus();
+      }
+    }, 100);
+  };
+
   const handleResetProgress = () => {
-    if (window.confirm("Bạn có chắc chắn muốn xóa tất cả tiến trình học của video này?")) {
+    if (window.confirm("Bạn có chắc chắn muốn xóa tiến trình lượt học này? (Số lần hoàn thành video vẫn sẽ được giữ lại)")) {
       setProgress({});
+      setIsCurrentRunCompleted(false);
       if (videoDetails) {
         localStorage.removeItem(`progress_${videoDetails.videoId}`);
       }
@@ -1242,6 +1302,18 @@ Standard Output Format Example:
                           <div className="flex items-center gap-2.5 truncate max-w-md sm:max-w-xl">
                             <Youtube size={14} className="text-rose-500 shrink-0" />
                             <span className="text-slate-700 group-hover:text-blue-600 truncate font-semibold">{hist.title}</span>
+                            {(() => {
+                              const count = parseInt(localStorage.getItem(`completion_count_${hist.videoId}`) || "0", 10);
+                              if (count > 0) {
+                                return (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold font-mono text-amber-700 bg-amber-50 border border-amber-200/80 px-1.5 py-0.5 rounded-md shrink-0">
+                                    <Trophy size={10} className="text-amber-500" />
+                                    Xong {count} lần
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })()}
                           </div>
                           <div className="text-slate-400 text-[10px] font-mono shrink-0 font-bold ml-2">
                             {hist.date}
@@ -1290,28 +1362,73 @@ Standard Output Format Example:
 
               {/* Compact Video Info & Progress Bar */}
               <div className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-xs flex items-center justify-between text-xs gap-2">
-                <div className="flex items-center gap-2 min-w-0 flex-1">
+                <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
                   <h3 className="text-slate-800 text-[11px] font-bold truncate flex-1" title={videoDetails.title}>
                     {videoDetails.title}
                   </h3>
                   <span className="text-[10px] font-mono font-bold text-blue-600 shrink-0 bg-blue-50 px-1.5 py-0.5 rounded">
                     {completedCount}/{sentences.length} ({averageAccuracy}%)
                   </span>
+                  {completionCount > 0 && (
+                    <span className="text-[10px] font-mono font-bold text-amber-700 shrink-0 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded flex items-center gap-1">
+                      <Trophy size={10} className="text-amber-500" />
+                      {completionCount} lần
+                    </span>
+                  )}
                 </div>
-                <button
-                  id="change-video-button-mobile"
-                  onClick={() => {
-                    setVideoDetails(null);
-                    setSentences([]);
-                    setEvaluationResult(null);
-                    setUserInput("");
-                  }}
-                  className="text-[10px] font-bold text-blue-600 hover:text-blue-500 flex items-center gap-0.5 shrink-0 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded cursor-pointer"
-                >
-                  <ArrowLeft size={10} />
-                  <span>Đổi Video</span>
-                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    id="redo-video-button-mobile"
+                    onClick={handleRedoVideo}
+                    className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 px-1.5 py-0.5 rounded cursor-pointer flex items-center gap-1"
+                    title="Làm lại bài học"
+                  >
+                    <RotateCcw size={10} />
+                    <span>Làm lại</span>
+                  </button>
+                  <button
+                    id="change-video-button-mobile"
+                    onClick={() => {
+                      setVideoDetails(null);
+                      setSentences([]);
+                      setEvaluationResult(null);
+                      setUserInput("");
+                    }}
+                    className="text-[10px] font-bold text-blue-600 hover:text-blue-500 flex items-center gap-0.5 shrink-0 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded cursor-pointer"
+                  >
+                    <ArrowLeft size={10} />
+                    <span>Đổi Video</span>
+                  </button>
+                </div>
               </div>
+
+              {/* Completion Banner Mobile */}
+              {sentences.length > 0 && completedCount === sentences.length && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-blue-500/10 border-2 border-emerald-500/80 rounded-xl p-3 sm:p-4 text-center shadow-xs flex flex-col items-center gap-2"
+                  id="video-completed-banner-mobile"
+                >
+                  <div className="flex items-center justify-center gap-1.5 text-emerald-700">
+                    <Trophy className="w-5 h-5 text-amber-500 shrink-0 animate-bounce" />
+                    <h3 className="text-xs sm:text-sm font-extrabold font-display">
+                      🎉 Chúc mừng! Bạn đã hoàn thành toàn bộ {sentences.length} câu!
+                    </h3>
+                  </div>
+                  <p className="text-[11px] text-slate-600 font-medium">
+                    Tổng số lần hoàn tất video: <strong className="text-amber-700 font-mono font-bold">{completionCount} lần</strong>
+                  </p>
+                  <button
+                    id="redo-video-banner-button-mobile"
+                    onClick={handleRedoVideo}
+                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer uppercase tracking-wider font-display"
+                  >
+                    <RotateCcw size={13} />
+                    <span>Làm lại bài học (Bắt đầu lượt mới)</span>
+                  </button>
+                </motion.div>
+              )}
 
               {/* Playground & Dictation Card */}
               <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-xs flex flex-col gap-2.5">
@@ -1621,7 +1738,7 @@ Standard Output Format Example:
                               </div>
                             )}
 
-                            <p className={`text-[11px] leading-normal truncate flex-1 ${
+                            <p className={`text-[11px] leading-normal break-words whitespace-normal flex-1 ${
                               isCurrent ? "font-bold text-slate-900" : "text-slate-500"
                             }`}>
                               {sentence.sentence}
@@ -1787,6 +1904,35 @@ Standard Output Format Example:
                       </button>
                     </div>
                   </div>
+
+                  {/* Completion Banner Desktop */}
+                  {sentences.length > 0 && completedCount === sentences.length && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-blue-500/10 border-2 border-emerald-400/90 rounded-2xl p-4 sm:p-5 text-center shadow-sm flex flex-col items-center gap-3 my-1"
+                      id="video-completed-banner-desktop"
+                    >
+                      <div className="flex items-center justify-center gap-2 text-emerald-700">
+                        <Trophy className="w-7 h-7 text-amber-500 shrink-0 animate-bounce" />
+                        <h3 className="text-base sm:text-lg font-extrabold font-display">
+                          🎉 Chúc mừng! Bạn đã hoàn thành 100% tất cả các câu trong video này!
+                        </h3>
+                      </div>
+                      <p className="text-xs sm:text-sm text-slate-600 font-medium max-w-xl">
+                        Số lần hoàn thành video: <strong className="text-amber-700 font-bold font-mono text-base">{completionCount} lần</strong>.
+                        Bạn có thể bấm nút <strong>"Làm lại bài học"</strong> bên dưới để bắt đầu lượt luyện tập mới!
+                      </p>
+                      <button
+                        id="redo-video-banner-button-desktop"
+                        onClick={handleRedoVideo}
+                        className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl text-xs sm:text-sm shadow-md hover:shadow-lg transition-all hover:scale-105 active:scale-95 flex items-center gap-2 cursor-pointer uppercase tracking-wider font-display"
+                      >
+                        <RotateCcw size={16} />
+                        <span>Làm lại bài học (Bắt đầu lượt mới)</span>
+                      </button>
+                    </motion.div>
+                  )}
 
                   {/* Dictation prompt instructions */}
                   <div className="bg-blue-50/60 border border-blue-100 rounded-2xl p-4 text-xs text-blue-800 flex items-start gap-2.5 shadow-sm">
@@ -1991,14 +2137,33 @@ Standard Output Format Example:
                       </strong>
                     </div>
                     <div className="w-px h-6 bg-slate-200"></div>
-                    <button
-                      id="reset-progress-button"
-                      onClick={handleResetProgress}
-                      className="p-1 rounded text-slate-400 hover:text-slate-600 transition-colors"
-                      title="Xóa tiến trình video này"
-                    >
-                      <RotateCcw size={14} />
-                    </button>
+                    <div>
+                      <span className="text-slate-400 block text-[9px] font-bold uppercase tracking-wider font-mono">Số lần xong</span>
+                      <strong className="text-amber-600 font-mono text-sm font-bold flex items-center justify-center gap-1">
+                        <Trophy size={13} className="text-amber-500 shrink-0" />
+                        {completionCount} lần
+                      </strong>
+                    </div>
+                    <div className="w-px h-6 bg-slate-200"></div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        id="redo-video-button"
+                        onClick={handleRedoVideo}
+                        className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                        title="Làm lại bài học (Xóa tiến trình lượt hiện tại để luyện lại từ đầu)"
+                      >
+                        <RotateCcw size={12} />
+                        <span>Làm lại</span>
+                      </button>
+                      <button
+                        id="reset-progress-button"
+                        onClick={handleResetProgress}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                        title="Xóa tiến trình lượt này"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   </div>
 
                   {/* YouTube Player (Positioned directly on the Right side) */}
@@ -2104,7 +2269,7 @@ Standard Output Format Example:
                                 </div>
                               )}
 
-                              <p className={`text-xs leading-normal truncate flex-1 ${
+                              <p className={`text-xs leading-normal break-words whitespace-normal flex-1 ${
                                 isCurrent ? "font-bold text-slate-900" : "text-slate-500"
                               }`}>
                                 {sentence.sentence}
