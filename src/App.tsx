@@ -587,34 +587,94 @@ export default function App() {
     }
   };
 
-  // Upload & Overwrite current lesson or history to Firebase Firestore
+  // Upload ALL history lessons & active video to Firebase Firestore (Deduplicated by videoId)
   const handleUploadToFirebase = async (targetVideoId?: string) => {
-    const vid = targetVideoId || videoDetails?.videoId;
-    if (!vid) {
-      alert("Vui lòng mở bài học hoặc chọn bài trong lịch sử để đẩy lên Firebase.");
+    // Collect all unique video entries from history and active video
+    const videoMap = new Map<string, {
+      videoId: string;
+      title: string;
+      sentences: Sentence[];
+      videoDetails: VideoDetails | null;
+      completionCount: number;
+    }>();
+
+    // 1. If targetVideoId is specified, prioritize it or add all history
+    for (const h of history) {
+      if (!h.videoId) continue;
+      let sList = h.sentences || [];
+      if ((!sList || sList.length === 0) && h.videoId === videoDetails?.videoId) {
+        sList = sentences;
+      }
+      if (!sList || sList.length === 0) {
+        const saved = localStorage.getItem(`sentences_${h.videoId}`);
+        if (saved) {
+          try { sList = JSON.parse(saved); } catch (e) {}
+        }
+      }
+
+      const count = parseInt(localStorage.getItem(`completion_count_${h.videoId}`) || "0", 10);
+      const vDetails: VideoDetails = h.videoDetails || {
+        videoId: h.videoId,
+        title: h.title || "YouTube Video",
+        author: "Kênh YouTube",
+        thumbnailUrl: `https://img.youtube.com/vi/${h.videoId}/hqdefault.jpg`,
+        language: "en",
+      };
+
+      if (sList && sList.length > 0) {
+        videoMap.set(h.videoId, {
+          videoId: h.videoId,
+          title: h.title,
+          sentences: sList,
+          videoDetails: vDetails,
+          completionCount: count,
+        });
+      }
+    }
+
+    // 2. Add current active video if present
+    if (videoDetails && sentences.length > 0) {
+      const activeCount = parseInt(localStorage.getItem(`completion_count_${videoDetails.videoId}`) || "0", 10);
+      videoMap.set(videoDetails.videoId, {
+        videoId: videoDetails.videoId,
+        title: videoDetails.title,
+        sentences: sentences,
+        videoDetails: videoDetails,
+        completionCount: activeCount,
+      });
+    }
+
+    const uniqueVideos = Array.from(videoMap.values());
+
+    if (uniqueVideos.length === 0) {
+      alert("Không tìm thấy dữ liệu bài học nào trong lịch sử để đẩy lên Firebase.");
       return;
     }
-    const currentSentences = targetVideoId && targetVideoId !== videoDetails?.videoId
-      ? (history.find(h => h.videoId === targetVideoId)?.sentences || [])
-      : sentences;
 
-    if (!currentSentences || currentSentences.length === 0) {
-      alert("Không tìm thấy dữ liệu câu thoại để đẩy lên.");
-      return;
-    }
-
-    const currentDetails = targetVideoId && targetVideoId !== videoDetails?.videoId
-      ? (history.find(h => h.videoId === targetVideoId)?.videoDetails || null)
-      : videoDetails;
+    // If specific target video requested, upload just that video
+    const videosToUpload = targetVideoId
+      ? uniqueVideos.filter((v) => v.videoId === targetVideoId)
+      : uniqueVideos;
 
     setIsLoading(true);
-    const success = await saveVideoToFirestore(vid, currentDetails, currentSentences);
+    let successCount = 0;
+
+    for (const item of videosToUpload) {
+      const ok = await saveVideoToFirestore(
+        item.videoId,
+        item.videoDetails,
+        item.sentences,
+        item.completionCount
+      );
+      if (ok) successCount++;
+    }
+
     setIsLoading(false);
 
-    if (success) {
-      alert(`Đã đẩy lên và ghi đè bài học (${currentSentences.length} câu) thành công lên Firebase Firestore!`);
+    if (successCount > 0) {
+      alert(`🎉 Đã đẩy thành công ${successCount}/${videosToUpload.length} bài học từ lịch sử lên Firebase Firestore! (Tự động chống trùng lặp theo ID video)`);
     } else {
-      alert("Không thể lưu bài học lên Firebase Firestore. Vui lòng kiểm tra lại cấu hình hoặc kết nối mạng.");
+      alert("Không thể lưu bài học lên Firebase Firestore. Vui lòng kiểm tra lại kết nối mạng hoặc cấu hình Firebase.");
     }
   };
 
@@ -625,6 +685,15 @@ export default function App() {
     setIsLoading(false);
 
     if (firestoreLessons.length > 0) {
+      firestoreLessons.forEach((item) => {
+        if (item.completionCount !== undefined) {
+          localStorage.setItem(`completion_count_${item.videoId}`, String(item.completionCount));
+        }
+        if (item.sentences && item.sentences.length > 0) {
+          localStorage.setItem(`sentences_${item.videoId}`, JSON.stringify(item.sentences));
+        }
+      });
+
       const cloudHistory = firestoreLessons.map((item) => ({
         videoId: item.videoId,
         title: item.title,
@@ -637,19 +706,32 @@ export default function App() {
           thumbnailUrl: item.thumbnailUrl,
         },
       }));
-      setHistory(cloudHistory);
+
+      // Merge cloud history with local history, deduplicating by videoId
+      const mergedMap = new Map<string, typeof cloudHistory[0]>();
+      cloudHistory.forEach((item) => mergedMap.set(item.videoId, item));
+      history.forEach((item) => {
+        if (!mergedMap.has(item.videoId)) {
+          mergedMap.set(item.videoId, item);
+        }
+      });
+
+      const mergedHistory = Array.from(mergedMap.values());
+      setHistory(mergedHistory);
       try {
-        localStorage.setItem("youtube_dictation_history", JSON.stringify(cloudHistory));
+        localStorage.setItem("youtube_dictation_history", JSON.stringify(mergedHistory));
       } catch (e) {}
 
-      // If current active video exists in Cloud, update local sentences
+      // If current active video exists in Cloud, update local sentences & completion count
       if (videoDetails?.videoId) {
         const match = firestoreLessons.find((f) => f.videoId === videoDetails.videoId);
         if (match && match.sentences && match.sentences.length > 0) {
           setSentences(match.sentences);
         }
+        const activeCount = parseInt(localStorage.getItem(`completion_count_${videoDetails.videoId}`) || "0", 10);
+        setCompletionCount(activeCount);
       }
-      alert(`Đã tải thành công ${firestoreLessons.length} bài học từ Firebase Firestore về thiết bị!`);
+      alert(`🎉 Đã tải và đồng bộ ${firestoreLessons.length} bài học từ Firebase Firestore về thiết bị thành công! (Tự động khử trùng lặp)`);
     } else {
       alert("Chưa có bài học nào được lưu trên Firebase Firestore.");
     }
