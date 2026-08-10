@@ -44,6 +44,24 @@ export interface FirestoreVideoLesson {
 }
 
 /**
+ * Helper to recursively remove undefined properties before saving to Firestore
+ */
+function sanitizeForFirestore(obj: any): any {
+  if (obj === null || obj === undefined) return null;
+  if (Array.isArray(obj)) return obj.map(sanitizeForFirestore);
+  if (typeof obj === "object" && !(obj instanceof Date)) {
+    const cleaned: any = {};
+    for (const key of Object.keys(obj)) {
+      if (obj[key] !== undefined) {
+        cleaned[key] = sanitizeForFirestore(obj[key]);
+      }
+    }
+    return cleaned;
+  }
+  return obj;
+}
+
+/**
  * Save video details and subtitle segments to Firebase Firestore
  */
 export async function saveVideoToFirestore(
@@ -64,22 +82,27 @@ export async function saveVideoToFirestore(
       title: videoDetails?.title || "Video YouTube",
       author: videoDetails?.author || "Kênh YouTube",
       thumbnailUrl: videoDetails?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
-      sentences: sentences.map((s) => ({
-        id: s.id,
-        sentence: s.sentence,
-        start: Number(s.start.toFixed(2)),
-        end: Number(s.end.toFixed(2)),
-        vietnamese: s.vietnamese || undefined,
-        isMerged: s.isMerged || undefined,
-      })),
+      sentences: sentences.map((s) => {
+        const item: any = {
+          id: s.id,
+          sentence: s.sentence,
+          start: Number(s.start.toFixed(2)),
+          end: Number(s.end.toFixed(2)),
+        };
+        if (s.vietnamese) item.vietnamese = s.vietnamese;
+        if (s.isMerged) item.isMerged = s.isMerged;
+        return item;
+      }),
       sentenceCount: sentences.length,
       updatedAt: now,
       createdAt: now,
       ...(completionCount !== undefined ? { completionCount } : {}),
     };
 
+    const cleanedData = sanitizeForFirestore(lessonData);
+
     // Use setDoc with merge: true so existing metadata like createdAt is preserved
-    await setDoc(docRef, lessonData, { merge: true });
+    await setDoc(docRef, cleanedData, { merge: true });
     console.log(`Successfully saved video ${videoId} and ${sentences.length} sub segments to Firestore.`);
     return true;
   } catch (error) {
