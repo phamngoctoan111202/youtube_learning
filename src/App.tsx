@@ -1195,39 +1195,52 @@ Standard Output Format Example:
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {RECOMMENDED_VIDEOS.map((video, idx) => (
-                    <button
-                      key={idx}
-                      id={`recommend-video-item-${idx}`}
-                      onClick={() => {
-                        setUrlInput(video.url);
-                        handleLoadVideo(video.url);
-                      }}
-                      className="bg-white hover:bg-slate-50 border-2 border-slate-200/80 p-5 rounded-2xl text-left transition-all hover:border-slate-300 hover:scale-[1.01] flex flex-col justify-between shadow-sm group"
-                    >
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-[10px] font-bold font-mono tracking-wider text-slate-400 uppercase">
-                            {video.category}
-                          </span>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
-                            video.language === "vi" 
-                              ? "bg-red-50 text-red-600 border-red-200" 
-                              : "bg-blue-50 text-blue-600 border-blue-200"
-                          }`}>
-                            {video.language === "vi" ? "TIẾNG VIỆT" : "TIẾNG ANH"}
-                          </span>
+                  {RECOMMENDED_VIDEOS.map((video, idx) => {
+                    const videoIdMatch = video.url.match(/(?:v=|\/embed\/|\/watch\?v=|\/v\/|https:\/\/youtu\.be\/|\/shorts\/)([^#&?]*)/);
+                    const recId = videoIdMatch ? videoIdMatch[1] : "";
+                    const recCount = recId ? parseInt(localStorage.getItem(`completion_count_${recId}`) || "0", 10) : 0;
+                    return (
+                      <button
+                        key={idx}
+                        id={`recommend-video-item-${idx}`}
+                        onClick={() => {
+                          setUrlInput(video.url);
+                          handleLoadVideo(video.url);
+                        }}
+                        className="bg-white hover:bg-slate-50 border-2 border-slate-200/80 p-5 rounded-2xl text-left transition-all hover:border-slate-300 hover:scale-[1.01] flex flex-col justify-between shadow-sm group"
+                      >
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[10px] font-bold font-mono tracking-wider text-slate-400 uppercase">
+                              {video.category}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              {recCount > 0 && (
+                                <span className="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1 shadow-2xs">
+                                  <Trophy size={10} className="text-amber-500" />
+                                  Xong {recCount} lần
+                                </span>
+                              )}
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                                video.language === "vi" 
+                                  ? "bg-red-50 text-red-600 border-red-200" 
+                                  : "bg-blue-50 text-blue-600 border-blue-200"
+                              }`}>
+                                {video.language === "vi" ? "TIẾNG VIỆT" : "TIẾNG ANH"}
+                              </span>
+                            </div>
+                          </div>
+                          <h4 className="text-slate-800 font-bold text-sm leading-snug group-hover:text-blue-600 transition-colors font-display">
+                            {video.title}
+                          </h4>
                         </div>
-                        <h4 className="text-slate-800 font-bold text-sm leading-snug group-hover:text-blue-600 transition-colors font-display">
-                          {video.title}
-                        </h4>
-                      </div>
-                      <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between w-full text-xs text-slate-500 font-medium">
-                        <span>Tác giả: {video.author}</span>
-                        <ChevronRight size={14} className="text-slate-400 group-hover:translate-x-1 transition-transform" />
-                      </div>
-                    </button>
-                  ))}
+                        <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between w-full text-xs text-slate-500 font-medium">
+                          <span>Tác giả: {video.author}</span>
+                          <ChevronRight size={14} className="text-slate-400 group-hover:translate-x-1 transition-transform" />
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1275,61 +1288,71 @@ Standard Output Format Example:
                     </div>
                   </div>
                   <div className="bg-white border-2 border-slate-200 rounded-2xl divide-y divide-slate-100 shadow-sm overflow-hidden">
-                    {history.map((hist, idx) => (
-                      <div
-                        key={hist.videoId || idx}
-                        className="flex items-center justify-between p-3.5 hover:bg-slate-50 transition-colors group"
-                      >
-                        <button
-                          id={`history-item-${idx}`}
-                          onClick={() => {
-                            if (hist.sentences && hist.sentences.length > 0 && hist.videoDetails) {
-                              setUrlInput(`https://www.youtube.com/watch?v=${hist.videoId}`);
-                              setVideoDetails(hist.videoDetails);
-                              setSentences(hist.sentences);
-                              setCurrentIndex(0);
-                              setError(null);
-                              setIsLoading(false);
-                              setUserInput("");
-                              setEvaluationResult(null);
-                            } else {
-                              setUrlInput(`https://www.youtube.com/watch?v=${hist.videoId}`);
-                              handleLoadVideo(`https://www.youtube.com/watch?v=${hist.videoId}`);
-                            }
-                          }}
-                          className="flex-1 flex items-center justify-between text-left text-xs min-w-0 mr-3"
+                    {history.map((hist, idx) => {
+                      const count = parseInt(
+                        localStorage.getItem(`completion_count_${hist.videoId}`) || "0",
+                        10
+                      );
+                      return (
+                        <div
+                          key={hist.videoId || idx}
+                          className="flex items-center justify-between p-3.5 hover:bg-slate-50 transition-colors group"
                         >
-                          <div className="flex items-center gap-2.5 truncate max-w-md sm:max-w-xl">
-                            <Youtube size={14} className="text-rose-500 shrink-0" />
-                            <span className="text-slate-700 group-hover:text-blue-600 truncate font-semibold">{hist.title}</span>
-                            {(() => {
-                              const count = parseInt(localStorage.getItem(`completion_count_${hist.videoId}`) || "0", 10);
-                              if (count > 0) {
-                                return (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold font-mono text-amber-700 bg-amber-50 border border-amber-200/80 px-1.5 py-0.5 rounded-md shrink-0">
-                                    <Trophy size={10} className="text-amber-500" />
-                                    Xong {count} lần
-                                  </span>
-                                );
+                          <button
+                            id={`history-item-${idx}`}
+                            onClick={() => {
+                              if (hist.sentences && hist.sentences.length > 0 && hist.videoDetails) {
+                                setUrlInput(`https://www.youtube.com/watch?v=${hist.videoId}`);
+                                setVideoDetails(hist.videoDetails);
+                                setSentences(hist.sentences);
+                                setCurrentIndex(0);
+                                setError(null);
+                                setIsLoading(false);
+                                setUserInput("");
+                                setEvaluationResult(null);
+                              } else {
+                                setUrlInput(`https://www.youtube.com/watch?v=${hist.videoId}`);
+                                handleLoadVideo(`https://www.youtube.com/watch?v=${hist.videoId}`);
                               }
-                              return null;
-                            })()}
-                          </div>
-                          <div className="text-slate-400 text-[10px] font-mono shrink-0 font-bold ml-2">
-                            {hist.date}
-                          </div>
-                        </button>
+                            }}
+                            className="flex-1 flex items-center justify-between text-left text-xs min-w-0 mr-3 gap-2"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              <Youtube size={16} className="text-rose-500 shrink-0" />
+                              <span className="text-slate-700 group-hover:text-blue-600 truncate font-semibold">
+                                {hist.title}
+                              </span>
+                            </div>
 
-                        <button
-                          id={`delete-history-item-${idx}`}
-                          onClick={(e) => handleDeleteHistoryItem(hist.videoId, e)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors shrink-0"
-                          title="Xóa video này khỏi lịch sử nghe"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    ))}
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span
+                                className={`inline-flex items-center gap-1 text-[11px] font-bold font-mono px-2 py-0.5 rounded-lg border shadow-2xs ${
+                                  count > 0
+                                    ? "text-amber-800 bg-amber-50 border-amber-300"
+                                    : "text-slate-500 bg-slate-100 border-slate-200"
+                                }`}
+                                title={`Đã hoàn thành video này ${count} lần`}
+                              >
+                                <Trophy size={11} className={count > 0 ? "text-amber-500" : "text-slate-400"} />
+                                <span>Xong {count} lần</span>
+                              </span>
+                              <span className="text-slate-400 text-[10px] font-mono font-bold shrink-0">
+                                {hist.date}
+                              </span>
+                            </div>
+                          </button>
+
+                          <button
+                            id={`delete-history-item-${idx}`}
+                            onClick={(e) => handleDeleteHistoryItem(hist.videoId, e)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors shrink-0"
+                            title="Xóa video này khỏi lịch sử nghe"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
