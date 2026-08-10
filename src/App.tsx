@@ -34,6 +34,7 @@ import {
   PlusCircle,
   Flame,
   Cloud,
+  CloudUpload,
   CloudDownload
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
