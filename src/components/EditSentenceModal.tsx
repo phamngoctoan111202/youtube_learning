@@ -24,6 +24,8 @@ export default function EditSentenceModal({
   const [vietnamese, setVietnamese] = useState("");
   const [start, setStart] = useState<number>(0);
   const [end, setEnd] = useState<number>(0);
+  const [loopLimit, setLoopLimit] = useState<number>(0);
+  const [loopDelay, setLoopDelay] = useState<number>(0);
 
   useEffect(() => {
     if (sentence) {
@@ -33,11 +35,15 @@ export default function EditSentenceModal({
         const newStart = Number(sentence.end.toFixed(2));
         setStart(newStart);
         setEnd(Number((newStart + 4).toFixed(2)));
+        setLoopLimit(0);
+        setLoopDelay(0);
       } else {
         setText(sentence.sentence);
         setVietnamese(sentence.vietnamese || "");
         setStart(Number(sentence.start.toFixed(2)));
         setEnd(Number(sentence.end.toFixed(2)));
+        setLoopLimit(sentence.loopLimit || 0);
+        setLoopDelay(sentence.loopDelay || 0);
       }
     }
   }, [sentence, isInsertMode]);
@@ -60,6 +66,8 @@ export default function EditSentenceModal({
       vietnamese: vietnamese.trim() || undefined,
       start: Math.max(0, start),
       end: Math.max(start + 0.1, end),
+      loopLimit: loopLimit,
+      loopDelay: loopDelay,
     });
     onClose();
   };
@@ -189,6 +197,47 @@ export default function EditSentenceModal({
               </div>
             </div>
 
+            {/* Custom Repeat and Pause Settings */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
+              {/* Loop Limit */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-slate-600 uppercase tracking-wider font-display">
+                  Số lần lặp riêng:
+                </label>
+                <select
+                  value={loopLimit}
+                  onChange={(e) => setLoopLimit(parseInt(e.target.value, 10))}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 focus:border-blue-500 rounded-lg text-slate-800 font-bold text-sm outline-none shadow-xs cursor-pointer"
+                >
+                  <option value={0}>Mặc định (Vô hạn)</option>
+                  <option value={1}>1 lần</option>
+                  <option value={2}>2 lần</option>
+                  <option value={3}>3 lần</option>
+                  <option value={5}>5 lần</option>
+                  <option value={10}>10 lần</option>
+                </select>
+              </div>
+
+              {/* Loop Delay */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-slate-600 uppercase tracking-wider font-display">
+                  Khoảng nghỉ riêng:
+                </label>
+                <select
+                  value={loopDelay}
+                  onChange={(e) => setLoopDelay(parseInt(e.target.value, 10))}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 focus:border-emerald-500 rounded-lg text-slate-800 font-bold text-sm outline-none shadow-xs cursor-pointer"
+                >
+                  <option value={0}>Không nghỉ (0s)</option>
+                  <option value={1}>1 giây</option>
+                  <option value={2}>2 giây</option>
+                  <option value={3}>3 giây</option>
+                  <option value={5}>5 giây</option>
+                  <option value={10}>10 giây</option>
+                </select>
+              </div>
+            </div>
+
             {/* Test Play Audio Action */}
             <button
               type="button"
@@ -199,6 +248,8 @@ export default function EditSentenceModal({
                   vietnamese: vietnamese.trim() || undefined,
                   start: Math.max(0, start),
                   end: Math.max(start + 0.1, end),
+                  loopLimit: loopLimit,
+                  loopDelay: loopDelay,
                 });
                 onTestPlay();
               }}

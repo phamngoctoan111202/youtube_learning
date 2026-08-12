@@ -48,6 +48,7 @@ export default function YoutubePlayer({
   const [isLooping, setIsLooping] = useState(false);
   const [playedCount, setPlayedCount] = useState(0);
   const [delayCountdown, setDelayCountdown] = useState<number>(0);
+  const [isWaitingDelay, setIsWaitingDelay] = useState(false);
 
   // Adjust bounds based on padding/cushion
   const paddedStart = Math.max(0, start - padding);
@@ -180,7 +181,7 @@ export default function YoutubePlayer({
           const time = playerRef.current.getCurrentTime();
           setCurrentTime(time);
 
-          if (time >= paddedEnd - 0.05) {
+          if (!isWaitingDelay && time >= paddedEnd - 0.05) {
             if (isLooping) {
               if (loopLimit > 0) {
                 setPlayedCount((prev) => {
@@ -195,6 +196,7 @@ export default function YoutubePlayer({
                     // Loop again with optional delay
                     if (loopDelay > 0) {
                       playerRef.current.pauseVideo();
+                      setIsWaitingDelay(true);
                       setDelayCountdown(loopDelay);
 
                       const countdownInterval = setInterval(() => {
@@ -226,6 +228,7 @@ export default function YoutubePlayer({
                 // Infinite loop with optional delay
                 if (loopDelay > 0) {
                   playerRef.current.pauseVideo();
+                  setIsWaitingDelay(true);
                   setDelayCountdown(loopDelay);
 
                   const countdownInterval = setInterval(() => {
@@ -274,7 +277,7 @@ export default function YoutubePlayer({
       if (delayTimeoutRef.current) clearTimeout(delayTimeoutRef.current);
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
     };
-  }, [isPlaying, paddedEnd, isLooping, paddedStart, onStateChange, loopLimit, loopDelay]);
+  }, [isPlaying, paddedEnd, isLooping, paddedStart, onStateChange, loopLimit, loopDelay, isWaitingDelay]);
 
   // Trigger segment playback when playTrigger or start/end changes
   useEffect(() => {
@@ -296,6 +299,7 @@ export default function YoutubePlayer({
       countdownIntervalRef.current = null;
     }
     setDelayCountdown(0);
+    setIsWaitingDelay(false);
   };
 
   const playSegment = () => {

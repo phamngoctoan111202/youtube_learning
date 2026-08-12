@@ -6,6 +6,8 @@ export interface Sentence {
   vietnamese?: string;
   isMerged?: boolean;
   mergedFrom?: Sentence[];
+  loopLimit?: number;
+  loopDelay?: number;
 }
 
 export interface VideoDetails {

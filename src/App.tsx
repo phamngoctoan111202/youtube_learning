@@ -1001,10 +1001,13 @@ export default function App() {
       setUserInput("");
       setEvaluationResult(null);
 
-      let finalLimit = defaultLoopCount;
-      let finalDelay = defaultLoopCountDelay;
+      const targetSentence = sentences[idx];
 
-      if (shouldPrompt) {
+      let finalLimit = defaultLoopCount;
+      // Use specific sentence loopLimit if configured (non-zero)
+      if (targetSentence.loopLimit !== undefined && targetSentence.loopLimit !== 0) {
+        finalLimit = targetSentence.loopLimit;
+      } else if (shouldPrompt) {
         if (defaultLoopCount === -1) {
           const input = prompt("Nhập số lần lặp cho câu này (Để trống hoặc nhập 0 để lặp vô hạn):", "3");
           if (input !== null) {
@@ -1014,6 +1017,15 @@ export default function App() {
             finalLimit = 0; // default to infinite
           }
         }
+      } else {
+        if (defaultLoopCount === -1) finalLimit = 0;
+      }
+
+      let finalDelay = defaultLoopCountDelay;
+      // Use specific sentence loopDelay if configured (non-zero)
+      if (targetSentence.loopDelay !== undefined && targetSentence.loopDelay !== 0) {
+        finalDelay = targetSentence.loopDelay;
+      } else if (shouldPrompt) {
         if (defaultLoopCountDelay === -1) {
           const inputDelay = prompt("Nhập khoảng nghỉ giữa các lần lặp (giây, mặc định là 0):", "2");
           if (inputDelay !== null) {
@@ -1024,7 +1036,6 @@ export default function App() {
           }
         }
       } else {
-        if (defaultLoopCount === -1) finalLimit = 0;
         if (defaultLoopCountDelay === -1) finalDelay = 0;
       }
 
@@ -1943,9 +1954,19 @@ Standard Output Format Example:
                           </div>
 
                           <div className="flex items-center justify-between mt-1 text-[8px] font-mono text-slate-400 font-semibold gap-1">
-                            <span className="flex items-center gap-0.5">
+                            <span className="flex items-center gap-0.5 flex-wrap">
                               <Clock size={8} />
-                              {sentence.start.toFixed(1)}s-{sentence.end.toFixed(1)}s
+                              <span>{sentence.start.toFixed(1)}s-{sentence.end.toFixed(1)}s</span>
+                              {sentence.loopLimit !== undefined && sentence.loopLimit > 0 && (
+                                <span className="ml-1 px-1 bg-amber-50 text-amber-700 border border-amber-200 rounded text-[7px] font-bold">
+                                  Lặp: {sentence.loopLimit}x
+                                </span>
+                              )}
+                              {sentence.loopDelay !== undefined && sentence.loopDelay > 0 && (
+                                <span className="ml-1 px-1 bg-teal-50 text-teal-700 border border-teal-200 rounded text-[7px] font-bold">
+                                  Nghỉ: {sentence.loopDelay}s
+                                </span>
+                              )}
                             </span>
                             
                             <div className="flex items-center gap-1">
@@ -2512,9 +2533,19 @@ Standard Output Format Example:
                             </div>
 
                             <div className="flex items-center justify-between mt-1.5 text-[9px] font-mono text-slate-400 font-semibold gap-1">
-                              <span className="flex items-center gap-1">
+                              <span className="flex items-center gap-1 flex-wrap">
                                 <Clock size={10} />
-                                {sentence.start.toFixed(1)}s - {sentence.end.toFixed(1)}s ({(sentence.end - sentence.start).toFixed(1)}s)
+                                <span>{sentence.start.toFixed(1)}s - {sentence.end.toFixed(1)}s ({(sentence.end - sentence.start).toFixed(1)}s)</span>
+                                {sentence.loopLimit !== undefined && sentence.loopLimit > 0 && (
+                                  <span className="ml-1 px-1.5 py-0.2 bg-amber-50 text-amber-700 border border-amber-200 rounded text-[8px] font-bold">
+                                    Lặp: {sentence.loopLimit}x
+                                  </span>
+                                )}
+                                {sentence.loopDelay !== undefined && sentence.loopDelay > 0 && (
+                                  <span className="ml-1 px-1.5 py-0.2 bg-teal-50 text-teal-700 border border-teal-200 rounded text-[8px] font-bold">
+                                    Nghỉ: {sentence.loopDelay}s
+                                  </span>
+                                )}
                               </span>
                               
                               <div className="flex items-center gap-1.5">
