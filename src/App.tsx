@@ -96,6 +96,25 @@ export default function App() {
   const [userInput, setUserInput] = useState("");
   const [padding, setPadding] = useState(0); // Default 0s padding
   const [playTrigger, setPlayTrigger] = useState(0);
+
+  const [defaultLoopCount, setDefaultLoopCount] = useState<number>(() => {
+    const saved = localStorage.getItem("default_loop_count");
+    return saved ? parseInt(saved, 10) : 0; // 0 means infinite, -1 means prompt
+  });
+  const [defaultLoopCountDelay, setDefaultLoopCountDelay] = useState<number>(() => {
+    const saved = localStorage.getItem("default_loop_count_delay");
+    return saved ? parseInt(saved, 10) : 0; // 0 means 0s, -1 means prompt
+  });
+  const [activeLoopLimit, setActiveLoopLimit] = useState<number>(0);
+  const [activeLoopDelay, setActiveLoopDelay] = useState<number>(0);
+
+  useEffect(() => {
+    localStorage.setItem("default_loop_count", String(defaultLoopCount));
+  }, [defaultLoopCount]);
+
+  useEffect(() => {
+    localStorage.setItem("default_loop_count_delay", String(defaultLoopCountDelay));
+  }, [defaultLoopCountDelay]);
   
   // Evaluation states
   const [isEvaluating, setIsEvaluating] = useState(false);
@@ -140,6 +159,22 @@ export default function App() {
     );
   };
 
+  const saveHistoryToLocalStorage = (updatedHistory: Array<{ videoId: string; title: string; date: string; sentences?: Sentence[]; videoDetails?: VideoDetails }>) => {
+    try {
+      localStorage.setItem("youtube_dictation_history", JSON.stringify(updatedHistory));
+    } catch (storageError) {
+      console.warn("Storage quota exceeded, trying to save history with less data", storageError);
+      try {
+        const strippedHistory = updatedHistory.map((h, idx) => 
+          idx === 0 ? h : { ...h, sentences: [] }
+        );
+        localStorage.setItem("youtube_dictation_history", JSON.stringify(strippedHistory));
+      } catch (e) {
+        console.error("Could not save history even after stripping data", e);
+      }
+    }
+  };
+
   const saveSentencesForVideo = (videoId: string | undefined, updatedSentences: Sentence[]) => {
     if (!videoId || updatedSentences.length === 0) return;
     try {
@@ -151,11 +186,7 @@ export default function App() {
           }
           return item;
         });
-        try {
-          localStorage.setItem("youtube_dictation_history", JSON.stringify(updatedHistory));
-        } catch (e) {
-          console.warn("Storage warning updating history", e);
-        }
+        saveHistoryToLocalStorage(updatedHistory);
         return updatedHistory;
       });
       // Save/Sync to Firebase Firestore Cloud DB
@@ -505,22 +536,10 @@ export default function App() {
       const updatedHistory = [
         newHistoryItem,
         ...history.filter((h) => h.videoId !== data.videoId),
-      ].slice(0, 10); // Keep last 10 entries
+      ]; // Keep all entries (no limit)
 
       setHistory(updatedHistory);
-        try {
-          localStorage.setItem("youtube_dictation_history", JSON.stringify(updatedHistory));
-        } catch (storageError) {
-          console.warn("Storage quota exceeded, trying to save with less data", storageError);
-          try {
-            const strippedHistory = updatedHistory.map((h, idx) => 
-              idx === 0 ? h : { ...h, sentences: [] }
-            );
-            localStorage.setItem("youtube_dictation_history", JSON.stringify(strippedHistory));
-          } catch (e) {
-            console.error("Could not save history even after stripping data");
-          }
-        }
+      saveHistoryToLocalStorage(updatedHistory);
 
         // Sync video and sub segments to Firebase Firestore Cloud DB
         saveVideoToFirestore(
@@ -547,7 +566,7 @@ export default function App() {
     const updatedHistory = history.filter((h) => h.videoId !== videoIdToDelete);
     setHistory(updatedHistory);
     try {
-      localStorage.setItem("youtube_dictation_history", JSON.stringify(updatedHistory));
+      saveHistoryToLocalStorage(updatedHistory);
       localStorage.removeItem(`sentences_${videoIdToDelete}`);
       localStorage.removeItem(`progress_${videoIdToDelete}`);
 
@@ -718,9 +737,7 @@ export default function App() {
 
       const mergedHistory = Array.from(mergedMap.values());
       setHistory(mergedHistory);
-      try {
-        localStorage.setItem("youtube_dictation_history", JSON.stringify(mergedHistory));
-      } catch (e) {}
+      saveHistoryToLocalStorage(mergedHistory);
 
       // If current active video exists in Cloud, update local sentences & completion count
       if (videoDetails?.videoId) {
@@ -978,6 +995,48 @@ export default function App() {
   }, [evaluationResult, isEvaluating, isVocabModalOpen, isEditModalOpen, currentIndex, sentences.length, isRandomMode]);
 
   // Navigation handlers
+  const handleSelectSentence = (idx: number, shouldPrompt = false) => {
+    if (idx >= 0 && idx < sentences.length) {
+      setCurrentIndex(idx);
+      setUserInput("");
+      setEvaluationResult(null);
+
+      let finalLimit = defaultLoopCount;
+      let finalDelay = defaultLoopCountDelay;
+
+      if (shouldPrompt) {
+        if (defaultLoopCount === -1) {
+          const input = prompt("Nhập số lần lặp cho câu này (Để trống hoặc nhập 0 để lặp vô hạn):", "3");
+          if (input !== null) {
+            const parsed = parseInt(input, 10);
+            finalLimit = isNaN(parsed) || parsed < 0 ? 0 : parsed;
+          } else {
+            finalLimit = 0; // default to infinite
+          }
+        }
+        if (defaultLoopCountDelay === -1) {
+          const inputDelay = prompt("Nhập khoảng nghỉ giữa các lần lặp (giây, mặc định là 0):", "2");
+          if (inputDelay !== null) {
+            const parsedDelay = parseInt(inputDelay, 10);
+            finalDelay = isNaN(parsedDelay) || parsedDelay < 0 ? 0 : parsedDelay;
+          } else {
+            finalDelay = 0; // default to 0s
+          }
+        }
+      } else {
+        if (defaultLoopCount === -1) finalLimit = 0;
+        if (defaultLoopCountDelay === -1) finalDelay = 0;
+      }
+
+      setActiveLoopLimit(finalLimit);
+      setActiveLoopDelay(finalDelay);
+
+      setTimeout(() => {
+        setPlayTrigger((prev) => prev + 1);
+      }, 50);
+    }
+  };
+
   const handleNext = () => {
     if (sentences.length === 0) return;
 
@@ -987,45 +1046,26 @@ export default function App() {
         while (randIdx === currentIndex) {
           randIdx = Math.floor(Math.random() * sentences.length);
         }
-        handleSelectSentence(randIdx);
+        handleSelectSentence(randIdx, false);
         return;
       }
     }
 
     if (currentIndex < sentences.length - 1) {
-      setCurrentIndex((prev) => prev + 1);
-      setUserInput("");
-      setEvaluationResult(null);
+      handleSelectSentence(currentIndex + 1, false);
       setTimeout(() => {
-        setPlayTrigger((prev) => prev + 1);
         if (isMobile) {
           mobileTextareaRef.current?.focus();
         } else {
           desktopTextareaRef.current?.focus();
         }
-      }, 50);
+      }, 100);
     }
   };
 
   const handlePrev = () => {
     if (currentIndex > 0) {
-      setCurrentIndex((prev) => prev - 1);
-      setUserInput("");
-      setEvaluationResult(null);
-      setTimeout(() => {
-        setPlayTrigger((prev) => prev + 1);
-      }, 50);
-    }
-  };
-
-  const handleSelectSentence = (idx: number) => {
-    if (idx >= 0 && idx < sentences.length) {
-      setCurrentIndex(idx);
-      setUserInput("");
-      setEvaluationResult(null);
-      setTimeout(() => {
-        setPlayTrigger((prev) => prev + 1);
-      }, 50);
+      handleSelectSentence(currentIndex - 1, false);
     }
   };
 
@@ -1035,7 +1075,7 @@ export default function App() {
     while (randIdx === currentIndex) {
       randIdx = Math.floor(Math.random() * sentences.length);
     }
-    handleSelectSentence(randIdx);
+    handleSelectSentence(randIdx, false);
   };
 
   const handleRedoVideo = () => {
@@ -1043,10 +1083,8 @@ export default function App() {
       localStorage.removeItem(`progress_${videoDetails.videoId}`);
     }
     setProgress({});
-    setCurrentIndex(0);
-    setUserInput("");
-    setEvaluationResult(null);
     setIsCurrentRunCompleted(false);
+    handleSelectSentence(0, false);
     setTimeout(() => {
       if (isMobile) {
         mobileTextareaRef.current?.focus();
@@ -1384,10 +1422,25 @@ Standard Output Format Example:
                           <button
                             id={`history-item-${idx}`}
                             onClick={() => {
-                              if (hist.sentences && hist.sentences.length > 0 && hist.videoDetails) {
+                              let sentencesToUse = hist.sentences || [];
+                              if (sentencesToUse.length === 0) {
+                                const cached = localStorage.getItem(`sentences_${hist.videoId}`);
+                                if (cached) {
+                                  try {
+                                    const parsed = JSON.parse(cached);
+                                    if (Array.isArray(parsed) && parsed.length > 0) {
+                                      sentencesToUse = parsed;
+                                    }
+                                  } catch (e) {
+                                    console.error("Failed to parse cached sentences", e);
+                                  }
+                                }
+                              }
+
+                              if (sentencesToUse.length > 0 && hist.videoDetails) {
                                 setUrlInput(`https://www.youtube.com/watch?v=${hist.videoId}`);
                                 setVideoDetails(hist.videoDetails);
-                                setSentences(hist.sentences);
+                                setSentences(sentencesToUse);
                                 setCurrentIndex(0);
                                 setError(null);
                                 setIsLoading(false);
@@ -1461,6 +1514,8 @@ Standard Output Format Example:
                       padding={padding}
                       playTrigger={playTrigger}
                       currentSentenceText={sentences[currentIndex]?.sentence}
+                      loopLimit={activeLoopLimit}
+                      loopDelay={activeLoopDelay}
                     />
                   </div>
                 )}
@@ -1553,6 +1608,42 @@ Standard Output Format Example:
                   </div>
 
                   <div className="flex items-center gap-1 flex-wrap justify-end">
+                    {/* Loop selector */}
+                    <div className="flex gap-0.5 items-center mr-1">
+                      <span className="text-[9px] text-slate-400 font-mono">Lặp:</span>
+                      <select
+                        value={defaultLoopCount}
+                        onChange={(e) => setDefaultLoopCount(parseInt(e.target.value, 10))}
+                        className="bg-slate-50 border border-slate-200 text-slate-700 text-[9.5px] rounded px-1 py-0.5 font-bold cursor-pointer outline-none"
+                      >
+                        <option value={0}>Vô hạn</option>
+                        <option value={1}>1 lần</option>
+                        <option value={2}>2 lần</option>
+                        <option value={3}>3 lần</option>
+                        <option value={5}>5 lần</option>
+                        <option value={10}>10 lần</option>
+                        <option value={-1}>Hỏi mỗi lần</option>
+                      </select>
+                    </div>
+
+                    {/* Delay selector */}
+                    <div className="flex gap-0.5 items-center mr-1">
+                      <span className="text-[9px] text-slate-400 font-mono">Nghỉ:</span>
+                      <select
+                        value={defaultLoopCountDelay}
+                        onChange={(e) => setDefaultLoopCountDelay(parseInt(e.target.value, 10))}
+                        className="bg-slate-50 border border-slate-200 text-slate-700 text-[9.5px] rounded px-1 py-0.5 font-bold cursor-pointer outline-none"
+                      >
+                        <option value={0}>0s</option>
+                        <option value={1}>1s</option>
+                        <option value={2}>2s</option>
+                        <option value={3}>3s</option>
+                        <option value={5}>5s</option>
+                        <option value={10}>10s</option>
+                        <option value={-1}>Hỏi mỗi lần</option>
+                      </select>
+                    </div>
+
                     {/* Padding selector */}
                     <div className="flex gap-0.5 items-center mr-1">
                       <span className="text-[9px] text-slate-400 font-mono">Đệm:</span>
@@ -1826,7 +1917,7 @@ Standard Output Format Example:
                         </button>
 
                         <div
-                          onClick={() => handleSelectSentence(idx)}
+                          onClick={() => handleSelectSentence(idx, true)}
                           className="flex-1 min-w-0 cursor-pointer"
                         >
                           <div className="flex items-center gap-1 flex-wrap">
@@ -1946,6 +2037,42 @@ Standard Output Format Example:
                     </div>
 
                     <div className="flex items-center gap-2 flex-wrap">
+                      {/* Loop Count configuration */}
+                      <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">Số lần lặp:</span>
+                        <select
+                          value={defaultLoopCount}
+                          onChange={(e) => setDefaultLoopCount(parseInt(e.target.value, 10))}
+                          className="bg-white border border-slate-200 text-slate-700 text-[10px] rounded-lg px-2 py-0.5 font-bold cursor-pointer outline-none shadow-3xs"
+                        >
+                          <option value={0}>Vô hạn (mặc định)</option>
+                          <option value={1}>1 lần</option>
+                          <option value={2}>2 lần</option>
+                          <option value={3}>3 lần</option>
+                          <option value={5}>5 lần</option>
+                          <option value={10}>10 lần</option>
+                          <option value={-1}>Hỏi mỗi lần khi click</option>
+                        </select>
+                      </div>
+
+                      {/* Loop Delay configuration */}
+                      <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">Khoảng nghỉ:</span>
+                        <select
+                          value={defaultLoopCountDelay}
+                          onChange={(e) => setDefaultLoopCountDelay(parseInt(e.target.value, 10))}
+                          className="bg-white border border-slate-200 text-slate-700 text-[10px] rounded-lg px-2 py-0.5 font-bold cursor-pointer outline-none shadow-3xs"
+                        >
+                          <option value={0}>Không nghỉ (0s)</option>
+                          <option value={1}>1 giây</option>
+                          <option value={2}>2 giây</option>
+                          <option value={3}>3 giây</option>
+                          <option value={5}>5 giây</option>
+                          <option value={10}>10 giây</option>
+                          <option value={-1}>Hỏi mỗi lần khi click</option>
+                        </select>
+                      </div>
+
                       {/* Cushion / Padding configuration */}
                       <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">Độ đệm:</span>
@@ -2282,6 +2409,8 @@ Standard Output Format Example:
                         padding={padding}
                         playTrigger={playTrigger}
                         currentSentenceText={sentences[currentIndex]?.sentence}
+                        loopLimit={activeLoopLimit}
+                        loopDelay={activeLoopDelay}
                       />
                     </div>
                   )}
@@ -2359,7 +2488,7 @@ Standard Output Format Example:
 
                           {/* Sentence body */}
                           <div
-                            onClick={() => handleSelectSentence(idx)}
+                            onClick={() => handleSelectSentence(idx, true)}
                             className="flex-1 min-w-0 cursor-pointer"
                           >
                             <div className="flex items-center gap-1.5 flex-wrap">

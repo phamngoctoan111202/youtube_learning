@@ -3,6 +3,7 @@ package com.example.youtubedictation
 import android.content.Context
 import android.os.Bundle
 import android.util.Log
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -74,6 +75,18 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+class BackgroundWebView(context: Context) : WebView(context) {
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        // Force report VISIBLE to prevent WebView from pausing media/timers in background
+        super.onWindowVisibilityChanged(View.VISIBLE)
+    }
+
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        // Force report VISIBLE to prevent internal pauses
+        super.onVisibilityChanged(changedView, View.VISIBLE)
+    }
+}
+
 @Composable
 fun AppScreen(onApiKeyChanged: (String) -> Unit = {}) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -83,8 +96,8 @@ fun AppScreen(onApiKeyChanged: (String) -> Unit = {}) {
         mutableStateOf(sharedPrefs.getString("gemini_api_key", "") ?: "")
     }
 
-    // Show API key dialog on first launch if key is empty
-    var showApiKeyDialog by remember { mutableStateOf(apiKey.isBlank()) }
+    // Do not show API key dialog automatically since the app can run fully offline/locally now
+    var showApiKeyDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
     var hasError by remember { mutableStateOf(false) }
@@ -112,7 +125,7 @@ fun AppScreen(onApiKeyChanged: (String) -> Unit = {}) {
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
                     factory = { ctx ->
-                        WebView(ctx).apply {
+                        BackgroundWebView(ctx).apply {
                             layoutParams = ViewGroup.LayoutParams(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -132,11 +145,25 @@ fun AppScreen(onApiKeyChanged: (String) -> Unit = {}) {
                                 override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                                     super.onPageStarted(view, url, favicon)
                                     isLoading = true
+                                    // Inject visibility overrides as early as possible
+                                    view?.evaluateJavascript(
+                                        "Object.defineProperty(document, 'visibilityState', { get: function() { return 'visible'; } }); " +
+                                        "Object.defineProperty(document, 'hidden', { get: function() { return false; } }); " +
+                                        "document.dispatchEvent(new Event('visibilitychange'));",
+                                        null
+                                    )
                                 }
 
                                 override fun onPageFinished(view: WebView?, url: String?) {
                                     super.onPageFinished(view, url)
                                     isLoading = false
+                                    // Reinject visibility overrides on page finish to ensure background playback works
+                                    view?.evaluateJavascript(
+                                        "Object.defineProperty(document, 'visibilityState', { get: function() { return 'visible'; } }); " +
+                                        "Object.defineProperty(document, 'hidden', { get: function() { return false; } }); " +
+                                        "document.dispatchEvent(new Event('visibilitychange'));",
+                                        null
+                                    )
                                 }
 
                                 override fun onReceivedError(

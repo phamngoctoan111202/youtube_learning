@@ -134,10 +134,12 @@ export async function getVideoFromFirestore(videoId: string): Promise<FirestoreV
 /**
  * Fetch all saved video lessons from Firestore ordered by recent updates
  */
-export async function getAllVideosFromFirestore(maxLimit = 20): Promise<FirestoreVideoLesson[]> {
+export async function getAllVideosFromFirestore(maxLimit?: number): Promise<FirestoreVideoLesson[]> {
   try {
     const videosRef = collection(db, "videos");
-    const q = query(videosRef, orderBy("updatedAt", "desc"), limit(maxLimit));
+    const q = maxLimit
+      ? query(videosRef, orderBy("updatedAt", "desc"), limit(maxLimit))
+      : query(videosRef, orderBy("updatedAt", "desc"));
     const querySnapshot = await getDocs(q);
 
     const lessons: FirestoreVideoLesson[] = [];

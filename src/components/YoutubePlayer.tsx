@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Play, Pause, RotateCcw, Volume2, Video, EyeOff, Repeat, Subtitles } from "lucide-react";
+import { Play, Pause, RotateCcw, Volume2, Video, EyeOff, Repeat, Subtitles, Clock } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 declare global {
@@ -17,6 +17,8 @@ interface YoutubePlayerProps {
   onStateChange?: (playing: boolean) => void;
   playTrigger?: number; // Counter to trigger playback programmatically
   currentSentenceText?: string;
+  loopLimit?: number; // Chosen repeat limit (0 means infinite)
+  loopDelay?: number; // Pause duration in seconds between loops
 }
 
 export default function YoutubePlayer({
@@ -27,10 +29,14 @@ export default function YoutubePlayer({
   onStateChange,
   playTrigger = 0,
   currentSentenceText = "",
+  loopLimit = 0,
+  loopDelay = 0,
 }: YoutubePlayerProps) {
   const containerId = `yt-player-${videoId}`;
   const playerRef = useRef<any>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const delayTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const [isLoaded, setIsLoaded] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -40,6 +46,8 @@ export default function YoutubePlayer({
   const [showSubtitles, setShowSubtitles] = useState(false); // Default off for dictation practice
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isLooping, setIsLooping] = useState(false);
+  const [playedCount, setPlayedCount] = useState(0);
+  const [delayCountdown, setDelayCountdown] = useState<number>(0);
 
   // Adjust bounds based on padding/cushion
   const paddedStart = Math.max(0, start - padding);
@@ -174,8 +182,75 @@ export default function YoutubePlayer({
 
           if (time >= paddedEnd - 0.05) {
             if (isLooping) {
-              playerRef.current.seekTo(paddedStart, true);
-              playerRef.current.playVideo();
+              if (loopLimit > 0) {
+                setPlayedCount((prev) => {
+                  const nextCount = prev + 1;
+                  if (nextCount >= loopLimit) {
+                    playerRef.current.pauseVideo();
+                    setIsPlaying(false);
+                    if (onStateChange) onStateChange(false);
+                    if (intervalRef.current) clearInterval(intervalRef.current);
+                    return nextCount;
+                  } else {
+                    // Loop again with optional delay
+                    if (loopDelay > 0) {
+                      playerRef.current.pauseVideo();
+                      setDelayCountdown(loopDelay);
+
+                      const countdownInterval = setInterval(() => {
+                        setDelayCountdown((c) => {
+                          if (c <= 1) {
+                            clearInterval(countdownInterval);
+                            return 0;
+                          }
+                          return c - 1;
+                        });
+                      }, 1000);
+                      countdownIntervalRef.current = countdownInterval;
+
+                      delayTimeoutRef.current = setTimeout(() => {
+                        clearDelayState();
+                        if (playerRef.current && isLooping) {
+                          playerRef.current.seekTo(paddedStart, true);
+                          playerRef.current.playVideo();
+                        }
+                      }, loopDelay * 1000);
+                    } else {
+                      playerRef.current.seekTo(paddedStart, true);
+                      playerRef.current.playVideo();
+                    }
+                    return nextCount;
+                  }
+                });
+              } else {
+                // Infinite loop with optional delay
+                if (loopDelay > 0) {
+                  playerRef.current.pauseVideo();
+                  setDelayCountdown(loopDelay);
+
+                  const countdownInterval = setInterval(() => {
+                    setDelayCountdown((c) => {
+                      if (c <= 1) {
+                        clearInterval(countdownInterval);
+                        return 0;
+                      }
+                      return c - 1;
+                    });
+                  }, 1000);
+                  countdownIntervalRef.current = countdownInterval;
+
+                  delayTimeoutRef.current = setTimeout(() => {
+                    clearDelayState();
+                    if (playerRef.current && isLooping) {
+                      playerRef.current.seekTo(paddedStart, true);
+                      playerRef.current.playVideo();
+                    }
+                  }, loopDelay * 1000);
+                } else {
+                  playerRef.current.seekTo(paddedStart, true);
+                  playerRef.current.playVideo();
+                }
+              }
             } else {
               playerRef.current.pauseVideo();
               setIsPlaying(false);
@@ -196,22 +271,41 @@ export default function YoutubePlayer({
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      if (delayTimeoutRef.current) clearTimeout(delayTimeoutRef.current);
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
     };
-  }, [isPlaying, paddedEnd, isLooping, paddedStart, onStateChange]);
+  }, [isPlaying, paddedEnd, isLooping, paddedStart, onStateChange, loopLimit, loopDelay]);
 
   // Trigger segment playback when playTrigger or start/end changes
   useEffect(() => {
     if (isLoaded && playerRef.current && playTrigger > 0) {
       playSegment();
+      if (loopLimit > 0) {
+        setIsLooping(true);
+      }
     }
-  }, [playTrigger, start, end, padding, isLoaded]);
+  }, [playTrigger, start, end, padding, isLoaded, loopLimit]);
+
+  const clearDelayState = () => {
+    if (delayTimeoutRef.current) {
+      clearTimeout(delayTimeoutRef.current);
+      delayTimeoutRef.current = null;
+    }
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+    setDelayCountdown(0);
+  };
 
   const playSegment = () => {
     if (!playerRef.current || !isLoaded) return;
+    clearDelayState();
     try {
       playerRef.current.seekTo(paddedStart, true);
       playerRef.current.playVideo();
       setIsPlaying(true);
+      setPlayedCount(0); // Reset count on new playback
       if (onStateChange) onStateChange(true);
     } catch (e) {
       console.error("Failed to play YouTube segment:", e);
@@ -220,6 +314,7 @@ export default function YoutubePlayer({
 
   const pauseSegment = () => {
     if (!playerRef.current || !isLoaded) return;
+    clearDelayState();
     try {
       playerRef.current.pauseVideo();
       setIsPlaying(false);
@@ -307,14 +402,25 @@ export default function YoutubePlayer({
                 id="loop-segment-button-android"
                 disabled={!isLoaded}
                 onClick={() => setIsLooping(!isLooping)}
-                className={`w-6 h-6 rounded-full border flex items-center justify-center active:scale-95 shadow-xs ${
+                className={`w-6 h-6 rounded-full border flex items-center justify-center active:scale-95 shadow-xs relative ${
                   isLooping
                     ? "bg-blue-100 border-blue-300 text-blue-600"
                     : "bg-white border-slate-200 text-slate-600"
                 }`}
-                title={isLooping ? "Tắt lặp lại" : "Lặp câu này"}
+                title={
+                  isLooping
+                    ? loopLimit > 0
+                      ? `Đang lặp ${loopLimit} lần (Đã lặp ${playedCount} lần) - Click để tắt`
+                      : "Đang lặp vô hạn - Click để tắt"
+                    : "Lặp câu này"
+                }
               >
                 <Repeat size={11} />
+                {isLooping && loopLimit > 0 && (
+                  <span className="absolute -top-1.5 -right-2 bg-blue-600 text-white text-[7px] font-bold px-0.5 rounded-full border border-white leading-none scale-90">
+                    {playedCount}/{loopLimit}
+                  </span>
+                )}
               </button>
 
               {/* Ultra-compact Speed buttons on Android */}
@@ -372,6 +478,14 @@ export default function YoutubePlayer({
 
       {/* Video / Audio Area */}
       <div className={`relative bg-black flex items-center justify-center ${isAndroid && hideVideo ? 'h-12' : 'aspect-video'}`}>
+        {delayCountdown > 0 && (
+          <div className="absolute inset-0 z-30 bg-slate-950/90 flex flex-col items-center justify-center text-center px-4 py-2 gap-1 backdrop-blur-xs">
+            <Clock className="text-amber-500 animate-spin shrink-0" size={isAndroid && hideVideo ? 12 : 24} />
+            <p className="text-white text-xs sm:text-sm font-extrabold font-mono leading-none">
+              Khoảng nghỉ: phát lại sau {delayCountdown}s...
+            </p>
+          </div>
+        )}
         {/* The Actual IFrame wrapper with crop zoom to hide YouTube 'More Videos' and title overlays */}
         <div
           className={`w-full h-full absolute top-0 left-0 overflow-hidden transition-opacity duration-300 ${
@@ -534,14 +648,25 @@ export default function YoutubePlayer({
               id="loop-segment-button"
               disabled={!isLoaded}
               onClick={() => setIsLooping(!isLooping)}
-              className={`w-10 h-10 rounded-full border flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-sm ${
+              className={`w-10 h-10 rounded-full border flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-sm relative ${
                 isLooping
                   ? "bg-blue-100 border-blue-300 text-blue-600"
                   : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
               }`}
-              title={isLooping ? "Tắt lặp lại" : "Lặp lại câu này"}
+              title={
+                isLooping
+                  ? loopLimit > 0
+                    ? `Đang lặp ${loopLimit} lần (Đã lặp ${playedCount} lần) - Click để tắt`
+                    : "Đang lặp vô hạn - Click để tắt"
+                  : "Lặp lại câu này"
+              }
             >
               <Repeat size={18} />
+              {isLooping && loopLimit > 0 && (
+                <span className="absolute -top-2.5 -right-3 bg-blue-600 text-white text-[9px] font-bold px-1 rounded-full border border-white">
+                  {playedCount}/{loopLimit}
+                </span>
+              )}
             </button>
           </div>
 

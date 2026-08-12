@@ -112,6 +112,7 @@ class EmbeddedServer(
     private fun handleTranscript(session: IHTTPSession): Response {
         val body = parseRequestBody(session)
         val url = body.get("url")?.asString ?: ""
+        val userHtml = body.get("html")?.asString
         val userRawText = body.get("rawText")?.asString
 
         if (url.isBlank()) {
@@ -147,84 +148,105 @@ class EmbeddedServer(
             return handleRawTextTranscript(userRawText, videoId, videoTitle, authorName, thumbnailUrl)
         }
 
-        // B. Fetch YouTube watch page and extract captions
-        try {
-            val watchUrl = "https://www.youtube.com/watch?v=$videoId"
-            val request = Request.Builder()
-                .url(watchUrl)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
-                .header("Accept-Language", "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7")
-                .build()
-            val response = httpClient.newCall(request).execute()
+        // B. Handle watch page retrieval (Fetch or parse user-provided HTML)
+        var captionTracks: JsonArray? = null
+        var watchSuccess = false
+        var selectedLanguage = "en"
 
-            if (response.isSuccessful) {
-                val html = response.body?.string() ?: ""
-                val captionTracks = extractCaptionTracks(html)
+        if (!userHtml.isNullOrBlank()) {
+            Log.i(TAG, "Using user-provided YouTube watch page HTML...")
+            captionTracks = extractCaptionTracks(userHtml)
+            if (captionTracks != null && captionTracks.size() > 0) {
+                watchSuccess = true
+            } else {
+                return jsonResponse(Response.Status.BAD_REQUEST, mapOf(
+                    "error" to "Không thể tìm thấy thông tin phụ đề trong đoạn mã nguồn HTML bạn đã dán. Hãy đảm bảo bạn đã mở đúng trang xem video chính thức trên YouTube, nhấn Ctrl+U và sao chép toàn bộ mã nguồn."
+                ))
+            }
+        } else {
+            try {
+                val watchUrl = "https://www.youtube.com/watch?v=$videoId"
+                val request = Request.Builder()
+                    .url(watchUrl)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
+                    .header("Accept-Language", "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7")
+                    .build()
+                val response = httpClient.newCall(request).execute()
 
-                if (captionTracks != null && captionTracks.size() > 0) {
-                    // Select language: vi first, then en, then first available
-                    var selectedTrack: JsonObject? = null
-                    var selectedLanguage = "en"
-
-                    for (i in 0 until captionTracks.size()) {
-                        val track = captionTracks.get(i).asJsonObject
-                        if (track.get("languageCode")?.asString == "vi") {
-                            selectedTrack = track
-                            break
-                        }
+                if (response.isSuccessful) {
+                    val html = response.body?.string() ?: ""
+                    captionTracks = extractCaptionTracks(html)
+                    if (captionTracks != null && captionTracks.size() > 0) {
+                        watchSuccess = true
                     }
-                    if (selectedTrack == null) {
-                        for (i in 0 until captionTracks.size()) {
-                            val track = captionTracks.get(i).asJsonObject
-                            if (track.get("languageCode")?.asString == "en") {
-                                selectedTrack = track
-                                break
-                            }
-                        }
-                    }
-                    if (selectedTrack == null) {
-                        selectedTrack = captionTracks.get(0).asJsonObject
-                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to fetch/parse watch page", e)
+            }
+        }
 
-                    selectedLanguage = selectedTrack?.get("languageCode")?.asString ?: "en"
-                    val transcriptUrl = selectedTrack?.get("baseUrl")?.asString
-
-                    if (transcriptUrl != null) {
-                        val transcriptReq = Request.Builder().url(transcriptUrl).build()
-                        val transcriptRes = httpClient.newCall(transcriptReq).execute()
-
-                        if (transcriptRes.isSuccessful) {
-                            val transcriptXml = transcriptRes.body?.string() ?: ""
-                            val rawSegments = parseXmlTranscript(transcriptXml)
-
-                            if (rawSegments.isNotEmpty()) {
-                                val sentences = if (geminiApiKey.isNotBlank()) {
-                                    segmentWithGemini(rawSegments) ?: rawSegments.mapIndexed { idx, seg ->
-                                        mapOf("id" to idx + 1, "sentence" to seg["text"], "start" to seg["start"], "end" to (seg["start"] as Double) + (seg["duration"] as Double))
-                                    }
-                                } else {
-                                    rawSegments.mapIndexed { idx, seg ->
-                                        mapOf("id" to idx + 1, "sentence" to seg["text"], "start" to seg["start"], "end" to (seg["start"] as Double) + (seg["duration"] as Double))
-                                    }
-                                }
-
-                                return jsonResponse(Response.Status.OK, mapOf(
-                                    "videoId" to videoId,
-                                    "title" to videoTitle,
-                                    "author" to authorName,
-                                    "thumbnailUrl" to thumbnailUrl,
-                                    "language" to selectedLanguage,
-                                    "sentences" to sentences,
-                                    "geminiEnhanced" to geminiApiKey.isNotBlank(),
-                                    "isRestored" to false
-                                ))
-                            }
-                        }
+        if (watchSuccess && captionTracks != null && captionTracks.size() > 0) {
+            // Select language: vi first, then en, then first available
+            var selectedTrack: JsonObject? = null
+            for (i in 0 until captionTracks.size()) {
+                val track = captionTracks.get(i).asJsonObject
+                if (track.get("languageCode")?.asString == "vi") {
+                    selectedTrack = track
+                    break
+                }
+            }
+            if (selectedTrack == null) {
+                for (i in 0 until captionTracks.size()) {
+                    val track = captionTracks.get(i).asJsonObject
+                    if (track.get("languageCode")?.asString == "en") {
+                        selectedTrack = track
+                        break
                     }
                 }
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to fetch/parse watch page", e)
+            if (selectedTrack == null) {
+                selectedTrack = captionTracks.get(0).asJsonObject
+            }
+
+            selectedLanguage = selectedTrack?.get("languageCode")?.asString ?: "en"
+            val transcriptUrl = selectedTrack?.get("baseUrl")?.asString
+
+            if (transcriptUrl != null) {
+                try {
+                    val transcriptReq = Request.Builder().url(transcriptUrl).build()
+                    val transcriptRes = httpClient.newCall(transcriptReq).execute()
+
+                    if (transcriptRes.isSuccessful) {
+                        val transcriptXml = transcriptRes.body?.string() ?: ""
+                        val rawSegments = parseXmlTranscript(transcriptXml)
+
+                        if (rawSegments.isNotEmpty()) {
+                            val merged = mergeRawSegmentsLocally(rawSegments)
+                            val finalSentences = merged.mapIndexed { idx, s ->
+                                mapOf(
+                                    "id" to idx + 1,
+                                    "sentence" to s["sentence"]!!,
+                                    "start" to s["start"]!!,
+                                    "end" to s["end"]!!
+                                )
+                            }
+
+                            return jsonResponse(Response.Status.OK, mapOf(
+                                "videoId" to videoId,
+                                "title" to videoTitle,
+                                "author" to authorName,
+                                "thumbnailUrl" to thumbnailUrl,
+                                "language" to selectedLanguage,
+                                "sentences" to finalSentences,
+                                "geminiEnhanced" to false,
+                                "isRestored" to false
+                            ))
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to retrieve or parse raw subtitles", e)
+                }
+            }
         }
 
         return jsonResponse(Response.Status.NOT_FOUND, mapOf(
@@ -235,87 +257,115 @@ class EmbeddedServer(
     private fun handleRawTextTranscript(
         rawText: String, videoId: String, videoTitle: String, authorName: String, thumbnailUrl: String
     ): Response {
-        // Check if text has timestamp format
-        val isTimestamped = Regex("^\\s*\\(\\d+:\\d+(?::\\d+)?\\s*-\\s*\\d+:\\d+(?::\\d+)?\\):\\s*.+", RegexOption.MULTILINE)
-            .containsMatchIn(rawText)
+        val lines = rawText.lines()
+        val localSentences = mutableListOf<Map<String, Any>>()
+        var currentTime = 0.0
+        var idCounter = 1
+        var pendingStart: Double? = null
 
-        if (isTimestamped) {
-            val sentences = mutableListOf<Map<String, Any>>()
-            val regex = Regex("^\\s*\\(([^)]+)\\):\\s*(.+)$")
-            var id = 1
+        val timestampRangeRegex = Regex("^\\s*[\\(\\[]?(\\d+:\\d+(?:[.,]\\d+)?(?::\\d+(?:[.,]\\d+)?)?)\\s*(?:-|-->|\\to)\\s*(\\d+:\\d+(?:[.,]\\d+)?(?::\\d+(?:[.,]\\d+)?)?)[\\)\\]]?:?\\s*(.*)$", RegexOption.IGNORE_CASE)
+        val singleTimestampRegex = Regex("^\\s*[\\(\\[]?(\\d+:\\d+(?:[.,]\\d+)?(?::\\d+(?:[.,]\\d+)?)?)[\\)\\]]?\\s*$")
 
-            for (line in rawText.lines()) {
-                val trimmed = line.trim()
-                if (trimmed.isEmpty()) continue
-                val match = regex.find(trimmed) ?: continue
-                val timeRange = match.groupValues[1]
-                val sentenceText = match.groupValues[2]
-                val timeParts = timeRange.split("-")
-                if (timeParts.size == 2) {
-                    val start = parseTimestampToSeconds(timeParts[0])
-                    val end = parseTimestampToSeconds(timeParts[1])
-                    sentences.add(mapOf(
-                        "id" to id++,
-                        "sentence" to sentenceText.trim(),
-                        "start" to start,
-                        "end" to end
-                    ))
+        for (line in lines) {
+            val trimmed = line.trim()
+            if (trimmed.isEmpty()) continue
+
+            if (Regex("^\\d+$").matches(trimmed) && trimmed.length < 5) {
+                continue
+            }
+
+            val singleMatch = singleTimestampRegex.find(trimmed)
+            if (singleMatch != null) {
+                pendingStart = parseTimestampToSeconds(singleMatch.groupValues[1])
+                continue
+            }
+
+            val rangeMatch = timestampRangeRegex.find(trimmed)
+            if (rangeMatch != null) {
+                val startSec = parseTimestampToSeconds(rangeMatch.groupValues[1])
+                val endSec = parseTimestampToSeconds(rangeMatch.groupValues[2])
+                val rawContent = rangeMatch.groupValues[3].trim()
+
+                var sentenceText = rawContent
+                var vietnameseText = ""
+
+                if (rawContent.contains("|")) {
+                    val parts = rawContent.split("|")
+                    sentenceText = parts[0].trim()
+                    vietnameseText = parts.subList(1, parts.size).joinToString("|").replace(Regex("^Dịch:\\s*", RegexOption.IGNORE_CASE), "").trim()
+                } else if (Regex("\\(Dịch:\\s*", RegexOption.IGNORE_CASE).containsMatchIn(rawContent)) {
+                    val vMatch = Regex("^(.*?)\\s*\\(Dịch:\\s*(.*?)\\)$", RegexOption.IGNORE_CASE).find(rawContent)
+                    if (vMatch != null) {
+                        sentenceText = vMatch.groupValues[1].trim()
+                        vietnameseText = vMatch.groupValues[2].trim()
+                    }
+                }
+
+                if (sentenceText.isNotEmpty()) {
+                    val item = mutableMapOf<String, Any>(
+                        "id" to idCounter++,
+                        "sentence" to sentenceText,
+                        "start" to String.format(java.util.Locale.US, "%.2f", startSec).toDouble(),
+                        "end" to String.format(java.util.Locale.US, "%.2f", endSec).toDouble()
+                    )
+                    if (vietnameseText.isNotEmpty()) {
+                        item["vietnamese"] = vietnameseText
+                    }
+                    localSentences.add(item)
+                    currentTime = endSec
+                    pendingStart = null
+                }
+                continue
+            }
+
+            var sentenceText = trimmed
+            var vietnameseText = ""
+
+            if (trimmed.contains("|")) {
+                val parts = trimmed.split("|")
+                sentenceText = parts[0].trim()
+                vietnameseText = parts.subList(1, parts.size).joinToString("|").replace(Regex("^Dịch:\\s*", RegexOption.IGNORE_CASE), "").trim()
+            } else if (Regex("\\(Dịch:\\s*", RegexOption.IGNORE_CASE).containsMatchIn(trimmed)) {
+                val vMatch = Regex("^(.*?)\\s*\\(Dịch:\\s*(.*?)\\)$", RegexOption.IGNORE_CASE).find(trimmed)
+                if (vMatch != null) {
+                    sentenceText = vMatch.groupValues[1].trim()
+                    vietnameseText = vMatch.groupValues[2].trim()
                 }
             }
 
-            if (sentences.isNotEmpty()) {
-                return jsonResponse(Response.Status.OK, mapOf(
-                    "videoId" to videoId,
-                    "title" to videoTitle,
-                    "author" to authorName,
-                    "thumbnailUrl" to thumbnailUrl,
-                    "language" to "en",
-                    "sentences" to sentences,
-                    "geminiEnhanced" to false,
-                    "isRestored" to false,
-                    "isManualText" to true
-                ))
+            if (sentenceText.isNotEmpty()) {
+                val wordCount = sentenceText.split(Regex("\\s+")).filter { it.isNotEmpty() }.size
+                val estimatedDuration = maxOf(3, minOf(8, Math.round(wordCount * 0.4).toInt()))
+                val startSec = pendingStart ?: currentTime
+                val endSec = startSec + estimatedDuration
+
+                val item = mutableMapOf<String, Any>(
+                    "id" to idCounter++,
+                    "sentence" to sentenceText,
+                    "start" to String.format(java.util.Locale.US, "%.2f", startSec).toDouble(),
+                    "end" to String.format(java.util.Locale.US, "%.2f", endSec).toDouble()
+                )
+                if (vietnameseText.isNotEmpty()) {
+                    item["vietnamese"] = vietnameseText
+                }
+                localSentences.add(item)
+                currentTime = endSec
+                pendingStart = null
             }
         }
 
-        // Use Gemini to segment raw text
-        if (geminiApiKey.isBlank()) {
-            return jsonResponse(Response.Status.BAD_REQUEST, mapOf(
-                "error" to "Không thể tự động phân đoạn văn bản phụ đề do thiếu cấu hình Gemini API Key."
+        if (localSentences.isNotEmpty()) {
+            return jsonResponse(Response.Status.OK, mapOf(
+                "videoId" to videoId,
+                "title" to videoTitle,
+                "author" to authorName,
+                "thumbnailUrl" to thumbnailUrl,
+                "language" to "en",
+                "sentences" to localSentences,
+                "geminiEnhanced" to false,
+                "isRestored" to false,
+                "isManualText" to true
             ))
-        }
-
-        val prompt = buildRawTextPrompt(rawText)
-        val geminiResult = callGeminiApi(prompt)
-
-        if (geminiResult != null) {
-            try {
-                val parsed = JsonParser.parseString(geminiResult).asJsonArray
-                val finalSentences = mutableListOf<Map<String, Any>>()
-                for (i in 0 until parsed.size()) {
-                    val item = parsed.get(i).asJsonObject
-                    finalSentences.add(mapOf(
-                        "id" to (i + 1),
-                        "sentence" to (item.get("sentence")?.asString?.trim() ?: ""),
-                        "start" to (item.get("start")?.asDouble ?: 0.0),
-                        "end" to (item.get("end")?.asDouble ?: 0.0)
-                    ))
-                }
-
-                return jsonResponse(Response.Status.OK, mapOf(
-                    "videoId" to videoId,
-                    "title" to videoTitle,
-                    "author" to authorName,
-                    "thumbnailUrl" to thumbnailUrl,
-                    "language" to "en",
-                    "sentences" to finalSentences,
-                    "geminiEnhanced" to true,
-                    "isRestored" to false,
-                    "isManualText" to true
-                ))
-            } catch (e: Exception) {
-                Log.e(TAG, "Error parsing Gemini response for raw text", e)
-            }
         }
 
         return jsonResponse(Response.Status.INTERNAL_ERROR, mapOf(
@@ -327,83 +377,141 @@ class EmbeddedServer(
         val body = parseRequestBody(session)
         val original = body.get("original")?.asString ?: ""
         val input = body.get("input")?.asString ?: ""
+        val vietnameseTranslation = body.get("vietnamese")?.asString
 
         if (original.isBlank()) {
             return jsonResponse(Response.Status.BAD_REQUEST, mapOf("error" to "Thiếu câu gốc"))
         }
 
-        val cleanTextForComparison = { t: String ->
-            t.lowercase()
+        val cleanWord = { w: String ->
+            w.lowercase()
                 .replace(Regex("[’‘`´]"), "'")
                 .replace(Regex("[“”]"), "\"")
-                .replace(Regex("[.,/#!\$%^&*;:{}=\\-_`~()?\"'–—]"), "")
-                .replace(Regex("\\s+"), " ")
+                .replace(Regex("[.,/#!\\$%^&*;:{}=\\-_`~()?\"'–—]"), "")
                 .trim()
         }
 
         val normOriginal = original.replace(Regex("\\s+"), " ").trim()
         val normInput = input.replace(Regex("\\s+"), " ").trim()
 
-        // Fast-track exact match (ignoring whitespace, punctuation & casing)
-        if (cleanTextForComparison(normOriginal) == cleanTextForComparison(normInput)) {
+        if (normInput.isBlank()) {
+            val rawOWords = normOriginal.split(Regex("\\s+")).filter { it.isNotEmpty() }
+            val corrections = rawOWords.mapIndexed { idx, w ->
+                mapOf(
+                    "type" to "missing",
+                    "expected" to w,
+                    "position" to idx + 1,
+                    "reason" to "Thiếu từ \"$w\" (chưa nhập nội dung)"
+                )
+            }
             return jsonResponse(Response.Status.OK, mapOf(
-                "accuracy" to 100,
-                "feedback" to "Xuất sắc! Bạn chép hoàn toàn chính xác.",
-                "corrections" to emptyList<Any>()
+                "accuracy" to 0,
+                "feedback" to "Bạn chưa nhập nội dung trả lời.",
+                "vietnameseTranslation" to vietnameseTranslation,
+                "corrections" to corrections
             ))
         }
 
-        if (geminiApiKey.isBlank()) {
-            val oWords = cleanTextForComparison(normOriginal).split(" ").filter { it.isNotEmpty() }
-            val iWords = cleanTextForComparison(normInput).split(" ").filter { it.isNotEmpty() }.toMutableList()
+        val rawOWords = normOriginal.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        val rawIWords = normInput.split(Regex("\\s+")).filter { it.isNotEmpty() }
 
-            var matched = 0
-            for (w in oWords) {
-                if (iWords.remove(w)) {
-                    matched++
+        val oWords = rawOWords.map(cleanWord)
+        val iWords = rawIWords.map(cleanWord)
+
+        val m = oWords.size
+        val n = iWords.size
+
+        val dp = Array(m + 1) { IntArray(n + 1) { 0 } }
+        for (i in 1..m) {
+            for (j in 1..n) {
+                if (oWords[i - 1] == iWords[j - 1]) {
+                    dp[i][j] = dp[i - 1][j - 1] + 1
+                } else {
+                    dp[i][j] = maxOf(dp[i - 1][j], dp[i][j - 1])
                 }
             }
+        }
 
-            val percent = if (oWords.isNotEmpty()) (matched * 100) / oWords.size else 0
+        var i = m
+        var j = n
+        data class Op(val op: String, val oIdx: Int? = null, val iIdx: Int? = null)
+        val ops = mutableListOf<Op>()
 
-            val feedback = when {
-                percent >= 95 -> "Xuất sắc! Bạn chép hoàn toàn chính xác."
-                percent >= 80 -> "Rất tốt! Chỉ sai một vài lỗi nhỏ."
-                percent >= 50 -> "Tốt! Cần chú ý kỹ hơn các từ khó."
-                else -> "Cố gắng lên nhé!"
+        while (i > 0 || j > 0) {
+            if (i > 0 && j > 0 && oWords[i - 1] == iWords[j - 1]) {
+                ops.add(0, Op("match", i - 1, j - 1))
+                i--
+                j--
+            } else if (i > 0 && j > 0 && dp[i - 1][j - 1] >= dp[i - 1][j] && dp[i - 1][j - 1] >= dp[i][j - 1]) {
+                ops.add(0, Op("different", i - 1, j - 1))
+                i--
+                j--
+            } else if (j > 0 && (i == 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+                ops.add(0, Op("extra", null, j - 1))
+                j--
+            } else {
+                ops.add(0, Op("missing", i - 1, null))
+                i--
             }
-
-            return jsonResponse(Response.Status.OK, mapOf(
-                "accuracy" to percent,
-                "feedback" to feedback,
-                "corrections" to emptyList<Any>()
-            ))
         }
 
-        val prompt = """So sánh câu đã gõ của người học với câu gốc để đánh giá mức độ chính xác khi luyện nghe chép chính tả.
+        val corrections = mutableListOf<Map<String, Any>>()
+        var correctCount = 0
 
-LƯU Ý QUAN TRỌNG VỀ KHOẢNG TRẮNG VÀ DẤU CÂU:
-- BẮT BUỘC bỏ qua mọi sự khác biệt về khoảng trắng (ví dụ: nhiều dấu cách liền nhau, xuống dòng, khoảng trắng ở đầu/cuối câu, khoảng trắng trước dấu câu). Xem "word1  word2" và "word1 word2" là hoàn toàn GIỐNG NHAU.
-- Bỏ qua các khác biệt nhỏ vô hại về viết hoa hay dấu câu ở cuối câu.
-- KHÔNG tạo lỗi trong "corrections" hoặc trừ điểm vì các dấu cách dư thừa hoặc thiếu dấu cách.
-
-Câu gốc: "$normOriginal"
-Câu người học gõ: "$normInput"
-
-Đánh giá các yếu tố sau:
-1. "accuracy": Số nguyên từ 0 đến 100 thể hiện mức độ chính xác từ vựng (percentage).
-2. "feedback": Lời nhận xét khích lệ bằng tiếng Việt.
-3. "explanation": Nếu người học có lỗi sai, hãy giải thích ngắn gọn trọng tâm bằng tiếng Việt về lý do vì sao câu bị sai (ví dụ về thì của động từ, ngữ pháp, từ loại, hoặc phân biệt từ). Ví dụ: "Just (vừa mới) nói về hành động đã xảy ra nên cần dùng quá khứ đơn 'woke' thay vì hiện tại 'wake'."
-4. "corrections": Danh sách các lỗi sai từ vựng cụ thể (KHÔNG bao gồm lỗi về dấu cách). Mỗi lỗi gồm: "word" (từ viết sai), "expected" (từ đúng), "type" ("missing"/"spelling"/"incorrect"), "reason" (giải thích ngắn gọn lý do vì sao từ này bị sai/nhầm lẫn).
-
-Trả về kết quả dưới dạng JSON."""
-
-        val result = callGeminiApi(prompt)
-        if (result != null) {
-            return newFixedLengthResponse(Response.Status.OK, "application/json", result)
+        for (op in ops) {
+            when (op.op) {
+                "match" -> correctCount++
+                "missing" -> {
+                    val oIdx = op.oIdx!!
+                    corrections.add(mapOf(
+                        "type" to "missing",
+                        "expected" to rawOWords[oIdx],
+                        "position" to oIdx + 1,
+                        "reason" to "Bị thiếu từ \"${rawOWords[oIdx]}\" tại vị trí thứ ${oIdx + 1}"
+                    ))
+                }
+                "extra" -> {
+                    val iIdx = op.iIdx!!
+                    corrections.add(mapOf(
+                        "type" to "extra",
+                        "word" to rawIWords[iIdx],
+                        "position" to iIdx + 1,
+                        "reason" to "Thừa từ \"${rawIWords[iIdx]}\" (không có trong câu gốc)"
+                    ))
+                }
+                "different" -> {
+                    val oIdx = op.oIdx!!
+                    val iIdx = op.iIdx!!
+                    corrections.add(mapOf(
+                        "type" to "different",
+                        "word" to rawIWords[iIdx],
+                        "expected" to rawOWords[oIdx],
+                        "position" to oIdx + 1,
+                        "reason" to "Khác từ tại vị trí thứ ${oIdx + 1}: Bạn gõ \"${rawIWords[iIdx]}\", từ đúng là \"${rawOWords[oIdx]}\""
+                    ))
+                }
+            }
         }
 
-        return jsonResponse(Response.Status.INTERNAL_ERROR, mapOf("error" to "Không thể đánh giá kết quả."))
+        val accuracy = if (m > 0) maxOf(0, minOf(100, Math.round((correctCount.toDouble() / m) * 100).toInt())) else 0
+
+        val feedback = when {
+            accuracy >= 100 -> "Xuất sắc! Bạn chép hoàn toàn chính xác."
+            accuracy >= 80 -> "Rất tốt! Chỉ sai một vài lỗi nhỏ."
+            accuracy >= 50 -> "Tốt! Cần chú ý kỹ hơn các từ khó."
+            else -> "Cố gắng lên nhé!"
+        }
+
+        val responseData = mutableMapOf<String, Any?>(
+            "accuracy" to accuracy,
+            "feedback" to feedback,
+            "corrections" to corrections
+        )
+        if (vietnameseTranslation != null) {
+            responseData["vietnameseTranslation"] = vietnameseTranslation
+        }
+
+        return jsonResponse(Response.Status.OK, responseData)
     }
 
     private fun handleVocabularyLookup(session: IHTTPSession): Response {
@@ -514,6 +622,70 @@ Trả về JSON."""
     }
 
     // ==================== Utility Functions ====================
+
+    private fun endsWithIncompleteWord(text: String): Boolean {
+        val clean = text.trim().lowercase()
+            .replace(Regex("[.,/#!\\$%^&*;:{}=\\-_`~()?\"'–—]"), "")
+        val words = clean.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        if (words.isEmpty()) return false
+        val lastWord = words.last()
+        val danglingWords = setOf(
+            "in", "at", "on", "to", "for", "with", "of", "from", "by", "into", "about",
+            "through", "under", "over", "between", "behind", "after", "before",
+            "a", "an", "the",
+            "my", "your", "his", "her", "our", "their", "its", "this", "that", "these", "those",
+            "and", "but", "or", "so", "because", "when", "where", "which", "if", "than", "as"
+        )
+        return danglingWords.contains(lastWord)
+    }
+
+    private fun mergeRawSegmentsLocally(rawSegments: List<Map<String, Any>>): List<Map<String, Any>> {
+        val result = mutableListOf<Map<String, Any>>()
+        if (rawSegments.isEmpty()) return result
+
+        var currentText = ""
+        var currentStart = rawSegments[0]["start"] as? Double ?: 0.0
+        var currentEnd = currentStart + (rawSegments[0]["duration"] as? Double ?: 2.0)
+
+        for (i in rawSegments.indices) {
+            val seg = rawSegments[i]
+            val text = (seg["text"] as? String ?: "").trim()
+            if (text.isEmpty()) continue
+
+            if (currentText.isEmpty()) {
+                currentText = text
+                currentStart = seg["start"] as? Double ?: 0.0
+                currentEnd = currentStart + (seg["duration"] as? Double ?: 2.0)
+            } else {
+                currentText += " $text"
+                currentEnd = (seg["start"] as? Double ?: 0.0) + (seg["duration"] as? Double ?: 2.0)
+            }
+
+            val wordCount = currentText.split(Regex("\\s+")).filter { it.isNotEmpty() }.size
+            val duration = currentEnd - currentStart
+            val endsWithPunctuation = Regex("[.!?]$").containsMatchIn(currentText)
+            val isDangling = endsWithIncompleteWord(currentText)
+
+            if (endsWithPunctuation || ((duration >= 6.0 || wordCount >= 10) && !isDangling) || i == rawSegments.size - 1) {
+                result.add(mapOf(
+                    "sentence" to currentText.trim(),
+                    "start" to String.format(java.util.Locale.US, "%.2f", currentStart).toDouble(),
+                    "end" to String.format(java.util.Locale.US, "%.2f", currentEnd).toDouble()
+                ))
+                currentText = ""
+            }
+        }
+
+        if (currentText.trim().isNotEmpty()) {
+            result.add(mapOf(
+                "sentence" to currentText.trim(),
+                "start" to String.format(java.util.Locale.US, "%.2f", currentStart).toDouble(),
+                "end" to String.format(java.util.Locale.US, "%.2f", currentEnd).toDouble()
+            ))
+        }
+
+        return result
+    }
 
     private fun extractVideoId(url: String): String? {
         val regex = Regex("^.*(youtu.be/|v/|u/\\w/|embed/|watch\\?v=|&v=)([^#&?]*).*")
