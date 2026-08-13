@@ -97,24 +97,8 @@ export default function App() {
   const [padding, setPadding] = useState(0); // Default 0s padding
   const [playTrigger, setPlayTrigger] = useState(0);
 
-  const [defaultLoopCount, setDefaultLoopCount] = useState<number>(() => {
-    const saved = localStorage.getItem("default_loop_count");
-    return saved ? parseInt(saved, 10) : 0; // 0 means infinite, -1 means prompt
-  });
-  const [defaultLoopCountDelay, setDefaultLoopCountDelay] = useState<number>(() => {
-    const saved = localStorage.getItem("default_loop_count_delay");
-    return saved ? parseInt(saved, 10) : 0; // 0 means 0s, -1 means prompt
-  });
   const [activeLoopLimit, setActiveLoopLimit] = useState<number>(0);
   const [activeLoopDelay, setActiveLoopDelay] = useState<number>(0);
-
-  useEffect(() => {
-    localStorage.setItem("default_loop_count", String(defaultLoopCount));
-  }, [defaultLoopCount]);
-
-  useEffect(() => {
-    localStorage.setItem("default_loop_count_delay", String(defaultLoopCountDelay));
-  }, [defaultLoopCountDelay]);
   
   // Evaluation states
   const [isEvaluating, setIsEvaluating] = useState(false);
@@ -1003,41 +987,15 @@ export default function App() {
 
       const targetSentence = sentences[idx];
 
-      let finalLimit = defaultLoopCount;
       // Use specific sentence loopLimit if configured (non-zero)
-      if (targetSentence.loopLimit !== undefined && targetSentence.loopLimit !== 0) {
-        finalLimit = targetSentence.loopLimit;
-      } else if (shouldPrompt) {
-        if (defaultLoopCount === -1) {
-          const input = prompt("Nhập số lần lặp cho câu này (Để trống hoặc nhập 0 để lặp vô hạn):", "3");
-          if (input !== null) {
-            const parsed = parseInt(input, 10);
-            finalLimit = isNaN(parsed) || parsed < 0 ? 0 : parsed;
-          } else {
-            finalLimit = 0; // default to infinite
-          }
-        }
-      } else {
-        if (defaultLoopCount === -1) finalLimit = 0;
-      }
+      const finalLimit = (targetSentence.loopLimit !== undefined && targetSentence.loopLimit !== 0) 
+        ? targetSentence.loopLimit 
+        : 0; // default to infinite/no limit
 
-      let finalDelay = defaultLoopCountDelay;
       // Use specific sentence loopDelay if configured (non-zero)
-      if (targetSentence.loopDelay !== undefined && targetSentence.loopDelay !== 0) {
-        finalDelay = targetSentence.loopDelay;
-      } else if (shouldPrompt) {
-        if (defaultLoopCountDelay === -1) {
-          const inputDelay = prompt("Nhập khoảng nghỉ giữa các lần lặp (giây, mặc định là 0):", "2");
-          if (inputDelay !== null) {
-            const parsedDelay = parseInt(inputDelay, 10);
-            finalDelay = isNaN(parsedDelay) || parsedDelay < 0 ? 0 : parsedDelay;
-          } else {
-            finalDelay = 0; // default to 0s
-          }
-        }
-      } else {
-        if (defaultLoopCountDelay === -1) finalDelay = 0;
-      }
+      const finalDelay = (targetSentence.loopDelay !== undefined && targetSentence.loopDelay !== 0)
+        ? targetSentence.loopDelay
+        : 0; // default to 0s
 
       setActiveLoopLimit(finalLimit);
       setActiveLoopDelay(finalDelay);
@@ -1527,6 +1485,7 @@ Standard Output Format Example:
                       currentSentenceText={sentences[currentIndex]?.sentence}
                       loopLimit={activeLoopLimit}
                       loopDelay={activeLoopDelay}
+                      onLoopComplete={handleNext}
                     />
                   </div>
                 )}
@@ -1619,41 +1578,6 @@ Standard Output Format Example:
                   </div>
 
                   <div className="flex items-center gap-1 flex-wrap justify-end">
-                    {/* Loop selector */}
-                    <div className="flex gap-0.5 items-center mr-1">
-                      <span className="text-[9px] text-slate-400 font-mono">Lặp:</span>
-                      <select
-                        value={defaultLoopCount}
-                        onChange={(e) => setDefaultLoopCount(parseInt(e.target.value, 10))}
-                        className="bg-slate-50 border border-slate-200 text-slate-700 text-[9.5px] rounded px-1 py-0.5 font-bold cursor-pointer outline-none"
-                      >
-                        <option value={0}>Vô hạn</option>
-                        <option value={1}>1 lần</option>
-                        <option value={2}>2 lần</option>
-                        <option value={3}>3 lần</option>
-                        <option value={5}>5 lần</option>
-                        <option value={10}>10 lần</option>
-                        <option value={-1}>Hỏi mỗi lần</option>
-                      </select>
-                    </div>
-
-                    {/* Delay selector */}
-                    <div className="flex gap-0.5 items-center mr-1">
-                      <span className="text-[9px] text-slate-400 font-mono">Nghỉ:</span>
-                      <select
-                        value={defaultLoopCountDelay}
-                        onChange={(e) => setDefaultLoopCountDelay(parseInt(e.target.value, 10))}
-                        className="bg-slate-50 border border-slate-200 text-slate-700 text-[9.5px] rounded px-1 py-0.5 font-bold cursor-pointer outline-none"
-                      >
-                        <option value={0}>0s</option>
-                        <option value={1}>1s</option>
-                        <option value={2}>2s</option>
-                        <option value={3}>3s</option>
-                        <option value={5}>5s</option>
-                        <option value={10}>10s</option>
-                        <option value={-1}>Hỏi mỗi lần</option>
-                      </select>
-                    </div>
 
                     {/* Padding selector */}
                     <div className="flex gap-0.5 items-center mr-1">
@@ -2058,41 +1982,6 @@ Standard Output Format Example:
                     </div>
 
                     <div className="flex items-center gap-2 flex-wrap">
-                      {/* Loop Count configuration */}
-                      <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">Số lần lặp:</span>
-                        <select
-                          value={defaultLoopCount}
-                          onChange={(e) => setDefaultLoopCount(parseInt(e.target.value, 10))}
-                          className="bg-white border border-slate-200 text-slate-700 text-[10px] rounded-lg px-2 py-0.5 font-bold cursor-pointer outline-none shadow-3xs"
-                        >
-                          <option value={0}>Vô hạn (mặc định)</option>
-                          <option value={1}>1 lần</option>
-                          <option value={2}>2 lần</option>
-                          <option value={3}>3 lần</option>
-                          <option value={5}>5 lần</option>
-                          <option value={10}>10 lần</option>
-                          <option value={-1}>Hỏi mỗi lần khi click</option>
-                        </select>
-                      </div>
-
-                      {/* Loop Delay configuration */}
-                      <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">Khoảng nghỉ:</span>
-                        <select
-                          value={defaultLoopCountDelay}
-                          onChange={(e) => setDefaultLoopCountDelay(parseInt(e.target.value, 10))}
-                          className="bg-white border border-slate-200 text-slate-700 text-[10px] rounded-lg px-2 py-0.5 font-bold cursor-pointer outline-none shadow-3xs"
-                        >
-                          <option value={0}>Không nghỉ (0s)</option>
-                          <option value={1}>1 giây</option>
-                          <option value={2}>2 giây</option>
-                          <option value={3}>3 giây</option>
-                          <option value={5}>5 giây</option>
-                          <option value={10}>10 giây</option>
-                          <option value={-1}>Hỏi mỗi lần khi click</option>
-                        </select>
-                      </div>
 
                       {/* Cushion / Padding configuration */}
                       <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl">
@@ -2432,6 +2321,7 @@ Standard Output Format Example:
                         currentSentenceText={sentences[currentIndex]?.sentence}
                         loopLimit={activeLoopLimit}
                         loopDelay={activeLoopDelay}
+                        onLoopComplete={handleNext}
                       />
                     </div>
                   )}
