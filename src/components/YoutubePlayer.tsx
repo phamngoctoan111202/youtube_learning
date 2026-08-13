@@ -37,6 +37,7 @@ export default function YoutubePlayer({
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const delayTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isWaitingDelayRef = useRef(false);
 
   const [isLoaded, setIsLoaded] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -45,7 +46,7 @@ export default function YoutubePlayer({
   const [hideVideo, setHideVideo] = useState(false); // Default to showing video
   const [showSubtitles, setShowSubtitles] = useState(false); // Default off for dictation practice
   const [playbackRate, setPlaybackRate] = useState(1);
-  const [isLooping, setIsLooping] = useState(false);
+  const [isLooping, setIsLooping] = useState(true);
   const [playedCount, setPlayedCount] = useState(0);
   const [delayCountdown, setDelayCountdown] = useState<number>(0);
   const [isWaitingDelay, setIsWaitingDelay] = useState(false);
@@ -181,7 +182,7 @@ export default function YoutubePlayer({
           const time = playerRef.current.getCurrentTime();
           setCurrentTime(time);
 
-          if (!isWaitingDelay && time >= paddedEnd - 0.05) {
+          if (!isWaitingDelayRef.current && time >= paddedEnd - 0.05) {
             if (isLooping) {
               if (loopLimit > 0) {
                 setPlayedCount((prev) => {
@@ -191,11 +192,15 @@ export default function YoutubePlayer({
                     setIsPlaying(false);
                     if (onStateChange) onStateChange(false);
                     if (intervalRef.current) clearInterval(intervalRef.current);
+                    if (onLoopComplete) {
+                      onLoopComplete();
+                    }
                     return nextCount;
                   } else {
                     // Loop again with optional delay
                     if (loopDelay > 0) {
                       playerRef.current.pauseVideo();
+                      isWaitingDelayRef.current = true;
                       setIsWaitingDelay(true);
                       setDelayCountdown(loopDelay);
 
@@ -228,6 +233,7 @@ export default function YoutubePlayer({
                 // Infinite loop with optional delay
                 if (loopDelay > 0) {
                   playerRef.current.pauseVideo();
+                  isWaitingDelayRef.current = true;
                   setIsWaitingDelay(true);
                   setDelayCountdown(loopDelay);
 
@@ -277,15 +283,13 @@ export default function YoutubePlayer({
       if (delayTimeoutRef.current) clearTimeout(delayTimeoutRef.current);
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
     };
-  }, [isPlaying, paddedEnd, isLooping, paddedStart, onStateChange, loopLimit, loopDelay, isWaitingDelay]);
+  }, [isPlaying, paddedEnd, isLooping, paddedStart, onStateChange, loopLimit, loopDelay]);
 
   // Trigger segment playback when playTrigger or start/end changes
   useEffect(() => {
     if (isLoaded && playerRef.current && playTrigger > 0) {
       playSegment();
-      if (loopLimit > 0) {
-        setIsLooping(true);
-      }
+      setIsLooping(true);
     }
   }, [playTrigger, start, end, padding, isLoaded, loopLimit]);
 
@@ -300,6 +304,7 @@ export default function YoutubePlayer({
     }
     setDelayCountdown(0);
     setIsWaitingDelay(false);
+    isWaitingDelayRef.current = false;
   };
 
   const playSegment = () => {
