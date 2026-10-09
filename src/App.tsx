@@ -306,17 +306,29 @@ export default function App() {
     setIsEditModalOpen(true);
   };
 
-  const handleAutoSetAllLoopDelays = () => {
+  const isAutoRestActive = sentences.length > 0 && sentences.some((s) => (s.loopDelay || 0) > 0);
+
+  const handleToggleAutoRest = () => {
     if (!sentences || sentences.length === 0) return;
 
+    const nextState = !isAutoRestActive;
+
     const updatedSentences = sentences.map((s) => {
-      const duration = Math.max(0, s.end - s.start);
-      // Tự động set khoảng nghỉ riêng = thời gian của câu + 5s
-      const calculatedDelay = Math.round((duration + 5) * 10) / 10;
-      return {
-        ...s,
-        loopDelay: calculatedDelay,
-      };
+      if (nextState) {
+        const duration = Math.max(0, s.end - s.start);
+        // Tự động set khoảng nghỉ riêng = thời gian của câu + 5s
+        const calculatedDelay = Math.round((duration + 5) * 10) / 10;
+        return {
+          ...s,
+          loopDelay: calculatedDelay,
+        };
+      } else {
+        // Tắt tự động nghỉ -> mặc định các câu đều 0s
+        return {
+          ...s,
+          loopDelay: 0,
+        };
+      }
     });
 
     setSentences(updatedSentences);
@@ -1767,12 +1779,21 @@ Standard Output Format Example:
 
                     <button
                       id="auto-set-delay-button-mobile"
-                      onClick={handleAutoSetAllLoopDelays}
-                      className="flex items-center gap-0.5 px-2 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
-                      title="Tự động set khoảng nghỉ riêng của tất cả các câu = thời gian của câu + 5s"
+                      type="button"
+                      onClick={handleToggleAutoRest}
+                      className={`flex items-center gap-0.5 px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer border ${
+                        isAutoRestActive
+                          ? "bg-amber-500 text-white border-amber-600 shadow-xs"
+                          : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
+                      }`}
+                      title={
+                        isAutoRestActive
+                          ? "Đang BẬT tự động nghỉ (+5s cho tất cả câu). Nhấn để TẮT (về 0s)."
+                          : "Đang TẮT tự động nghỉ (0s). Nhấn để BẬT (+5s cho tất cả câu)."
+                      }
                     >
-                      <Clock size={11} />
-                      <span>Nghỉ (+5s)</span>
+                      <Clock size={11} className={isAutoRestActive ? "animate-pulse" : ""} />
+                      <span>Nghỉ (+5s): {isAutoRestActive ? "BẬT" : "TẮT"}</span>
                     </button>
                   </div>
 
@@ -1829,12 +1850,20 @@ Standard Output Format Example:
                       </button>
                       <button
                         type="button"
-                        onClick={handleAutoSetAllLoopDelays}
-                        className="flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded text-[9px] font-bold cursor-pointer transition-colors"
-                        title="Tự động set khoảng nghỉ riêng của tất cả các câu = thời gian của câu + 5s"
+                        onClick={handleToggleAutoRest}
+                        className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer transition-colors border ${
+                          isAutoRestActive
+                            ? "bg-amber-500 text-white border-amber-600"
+                            : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
+                        }`}
+                        title={
+                          isAutoRestActive
+                            ? "Đang BẬT tự động nghỉ (+5s). Nhấn để TẮT (mặc định 0s)."
+                            : "Đang TẮT tự động nghỉ. Nhấn để BẬT (+5s cho tất cả các câu)."
+                        }
                       >
                         <Clock size={10} />
-                        <span>Nghỉ (+5s)</span>
+                        <span>Nghỉ (+5s): {isAutoRestActive ? "BẬT" : "TẮT"}</span>
                       </button>
                       {selectedSentenceIds.length >= 2 && (
                         <>
@@ -2226,12 +2255,21 @@ Standard Output Format Example:
 
                       <button
                         id="auto-set-delay-button"
-                        onClick={handleAutoSetAllLoopDelays}
-                        className="flex items-center gap-1.5 px-3 py-3 bg-amber-50 hover:bg-amber-100 text-amber-700 border-2 border-amber-200 rounded-xl text-xs font-bold transition-all hover:scale-105 active:scale-95 shadow-sm cursor-pointer"
-                        title="Tự động set khoảng nghỉ riêng của tất cả các câu = thời gian của câu + 5s"
+                        type="button"
+                        onClick={handleToggleAutoRest}
+                        className={`flex items-center gap-1.5 px-3 py-3 rounded-xl text-xs font-bold transition-all hover:scale-105 active:scale-95 shadow-sm cursor-pointer border-2 ${
+                          isAutoRestActive
+                            ? "bg-amber-500 text-white border-amber-600 shadow-amber-500/20 shadow-md"
+                            : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                        }`}
+                        title={
+                          isAutoRestActive
+                            ? "Đang BẬT tự động nghỉ (+5s cho tất cả các câu). Nhấn để TẮT (mặc định 0s)."
+                            : "Đang TẮT tự động nghỉ (0s). Nhấn để BẬT (+5s cho tất cả các câu)."
+                        }
                       >
-                        <Clock size={14} />
-                        <span>Tự động nghỉ (+5s)</span>
+                        <Clock size={14} className={isAutoRestActive ? "animate-pulse" : ""} />
+                        <span>Tự động nghỉ (+5s): {isAutoRestActive ? "BẬT" : "TẮT"}</span>
                       </button>
                     </div>
 
@@ -2391,12 +2429,20 @@ Standard Output Format Example:
                         </button>
                         <button
                           type="button"
-                          onClick={handleAutoSetAllLoopDelays}
-                          className="flex items-center gap-1 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg text-xs font-bold transition-all cursor-pointer"
-                          title="Tự động set khoảng nghỉ riêng của tất cả các câu = thời gian của câu + 5s"
+                          onClick={handleToggleAutoRest}
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                            isAutoRestActive
+                              ? "bg-amber-500 text-white border-amber-600 shadow-xs"
+                              : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
+                          }`}
+                          title={
+                            isAutoRestActive
+                              ? "Đang BẬT tự động nghỉ (+5s). Nhấn để TẮT (mặc định 0s)."
+                              : "Đang TẮT tự động nghỉ (0s). Nhấn để BẬT (+5s cho tất cả các câu)."
+                          }
                         >
                           <Clock size={13} />
-                          <span>Tự động nghỉ (+5s)</span>
+                          <span>Tự động nghỉ (+5s): {isAutoRestActive ? "BẬT" : "TẮT"}</span>
                         </button>
 
                         {selectedSentenceIds.length >= 2 && (
