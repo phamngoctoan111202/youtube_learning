@@ -19,6 +19,7 @@ interface YoutubePlayerProps {
   currentSentenceText?: string;
   loopLimit?: number; // Chosen repeat limit (0 means infinite)
   loopDelay?: number; // Pause duration in seconds between loops
+  onLoopComplete?: () => void;
 }
 
 export default function YoutubePlayer({
@@ -31,6 +32,7 @@ export default function YoutubePlayer({
   currentSentenceText = "",
   loopLimit = 0,
   loopDelay = 0,
+  onLoopComplete,
 }: YoutubePlayerProps) {
   const containerId = `yt-player-${videoId}`;
   const playerRef = useRef<any>(null);
@@ -279,11 +281,21 @@ export default function YoutubePlayer({
     }
 
     return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [isPlaying, paddedEnd, isLooping, paddedStart, onStateChange, loopLimit, loopDelay, onLoopComplete]);
+
+  // Clean up all timers on component unmount
+  useEffect(() => {
+    return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
       if (delayTimeoutRef.current) clearTimeout(delayTimeoutRef.current);
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
     };
-  }, [isPlaying, paddedEnd, isLooping, paddedStart, onStateChange, loopLimit, loopDelay]);
+  }, []);
 
   // Trigger segment playback when playTrigger or start/end changes
   useEffect(() => {
@@ -367,7 +379,7 @@ export default function YoutubePlayer({
     return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
   };
 
-  const isAndroid = typeof navigator !== "undefined" && /Android|YTDictationAndroid/i.test(navigator.userAgent);
+  const isAndroid = false;
 
   return (
     <div className={`bg-white border-2 border-slate-200 overflow-hidden shadow-sm ${isAndroid ? 'rounded-xl' : 'rounded-3xl'}`} id="youtube-player-card">
@@ -491,7 +503,7 @@ export default function YoutubePlayer({
           <div className="absolute inset-0 z-30 bg-slate-950/90 flex flex-col items-center justify-center text-center px-4 py-2 gap-1 backdrop-blur-xs">
             <Clock className="text-amber-500 animate-spin shrink-0" size={isAndroid && hideVideo ? 12 : 24} />
             <p className="text-white text-xs sm:text-sm font-extrabold font-mono leading-none">
-              Khoảng nghỉ: phát lại sau {delayCountdown}s...
+              Khoảng nghỉ: phát lại sau {Math.ceil(delayCountdown)}s...
             </p>
           </div>
         )}

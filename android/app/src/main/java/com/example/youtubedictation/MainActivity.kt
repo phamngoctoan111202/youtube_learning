@@ -1,6 +1,10 @@
 package com.example.youtubedictation
 
+import android.Manifest
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.View
@@ -34,6 +38,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Request notification permission for Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
+            }
+        }
+
+        // Start background playback service
+        startBackgroundService()
+
         // Start embedded server
         startEmbeddedServer()
 
@@ -54,6 +68,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun startBackgroundService() {
+        val intent = Intent(this, BackgroundPlaybackService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
+    }
+
+    private fun stopBackgroundService() {
+        val intent = Intent(this, BackgroundPlaybackService::class.java)
+        stopService(intent)
+    }
+
     private fun startEmbeddedServer() {
         try {
             embeddedServer = EmbeddedServer(this, 8080).apply {
@@ -71,6 +99,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         embeddedServer?.stop()
+        stopBackgroundService()
         Log.i("MainActivity", "Embedded server stopped")
     }
 }
@@ -138,6 +167,7 @@ fun AppScreen(onApiKeyChanged: (String) -> Unit = {}) {
                             settings.databaseEnabled = true
                             settings.loadWithOverviewMode = true
                             settings.useWideViewPort = true
+                            settings.mediaPlaybackRequiresUserGesture = false
                             settings.userAgentString = "${settings.userAgentString} YTDictationAndroid"
                             settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
 

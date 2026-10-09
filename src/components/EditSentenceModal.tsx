@@ -225,7 +225,7 @@ export default function EditSentenceModal({
                 </label>
                 <select
                   value={loopDelay}
-                  onChange={(e) => setLoopDelay(parseInt(e.target.value, 10))}
+                  onChange={(e) => setLoopDelay(parseFloat(e.target.value))}
                   className="w-full px-3 py-2 bg-white border border-slate-300 focus:border-emerald-500 rounded-lg text-slate-800 font-bold text-sm outline-none shadow-xs cursor-pointer"
                 >
                   <option value={0}>Không nghỉ (0s)</option>
@@ -234,6 +234,9 @@ export default function EditSentenceModal({
                   <option value={3}>3 giây</option>
                   <option value={5}>5 giây</option>
                   <option value={10}>10 giây</option>
+                  {loopDelay > 0 && ![0, 1, 2, 3, 5, 10].includes(loopDelay) && (
+                    <option value={loopDelay}>{loopDelay} giây (Tự động)</option>
+                  )}
                 </select>
               </div>
             </div>

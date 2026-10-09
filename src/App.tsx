@@ -306,6 +306,23 @@ export default function App() {
     setIsEditModalOpen(true);
   };
 
+  const handleAutoSetAllLoopDelays = () => {
+    if (!sentences || sentences.length === 0) return;
+
+    const updatedSentences = sentences.map((s) => {
+      const duration = Math.max(0, s.end - s.start);
+      // Tự động set khoảng nghỉ riêng = thời gian của câu + 5s
+      const calculatedDelay = Math.round((duration + 5) * 10) / 10;
+      return {
+        ...s,
+        loopDelay: calculatedDelay,
+      };
+    });
+
+    setSentences(updatedSentences);
+    saveSentencesForVideo(videoDetails?.videoId, updatedSentences);
+  };
+
   const handleDeleteSentence = (sentenceId: number, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (sentences.length <= 1) {
@@ -922,7 +939,7 @@ export default function App() {
       if (isMobile) {
         mobileTextareaRef.current?.focus();
       } else {
-        desktopInputRef.current?.focus();
+        desktopTextareaRef.current?.focus();
       }
     }, 100);
   };
@@ -1747,6 +1764,16 @@ Standard Output Format Example:
                     >
                       <ArrowRight size={13} />
                     </button>
+
+                    <button
+                      id="auto-set-delay-button-mobile"
+                      onClick={handleAutoSetAllLoopDelays}
+                      className="flex items-center gap-0.5 px-2 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                      title="Tự động set khoảng nghỉ riêng của tất cả các câu = thời gian của câu + 5s"
+                    >
+                      <Clock size={11} />
+                      <span>Nghỉ (+5s)</span>
+                    </button>
                   </div>
 
                   <button
@@ -1799,6 +1826,15 @@ Standard Output Format Example:
                       >
                         <PlusCircle size={10} />
                         <span>Thêm câu mới</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAutoSetAllLoopDelays}
+                        className="flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded text-[9px] font-bold cursor-pointer transition-colors"
+                        title="Tự động set khoảng nghỉ riêng của tất cả các câu = thời gian của câu + 5s"
+                      >
+                        <Clock size={10} />
+                        <span>Nghỉ (+5s)</span>
                       </button>
                       {selectedSentenceIds.length >= 2 && (
                         <>
@@ -2187,6 +2223,16 @@ Standard Output Format Example:
                       >
                         <ArrowRight size={16} />
                       </button>
+
+                      <button
+                        id="auto-set-delay-button"
+                        onClick={handleAutoSetAllLoopDelays}
+                        className="flex items-center gap-1.5 px-3 py-3 bg-amber-50 hover:bg-amber-100 text-amber-700 border-2 border-amber-200 rounded-xl text-xs font-bold transition-all hover:scale-105 active:scale-95 shadow-sm cursor-pointer"
+                        title="Tự động set khoảng nghỉ riêng của tất cả các câu = thời gian của câu + 5s"
+                      >
+                        <Clock size={14} />
+                        <span>Tự động nghỉ (+5s)</span>
+                      </button>
                     </div>
 
                     {/* Check / Evaluation CTA */}
@@ -2342,6 +2388,15 @@ Standard Output Format Example:
                         >
                           <PlusCircle size={13} />
                           <span>Thêm câu</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleAutoSetAllLoopDelays}
+                          className="flex items-center gap-1 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                          title="Tự động set khoảng nghỉ riêng của tất cả các câu = thời gian của câu + 5s"
+                        >
+                          <Clock size={13} />
+                          <span>Tự động nghỉ (+5s)</span>
                         </button>
 
                         {selectedSentenceIds.length >= 2 && (

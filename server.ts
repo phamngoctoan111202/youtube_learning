@@ -269,6 +269,15 @@ app.post("/api/transcript", async (req, res) => {
           continue;
         }
 
+        // If line is a Vietnamese translation line (e.g. "Dịch: Trong video này...")
+        if (/^(Dịch|Bản dịch|Translation):\s*/i.test(trimmed)) {
+          const cleanVi = trimmed.replace(/^(Dịch|Bản dịch|Translation):\s*/i, "").trim();
+          if (localSentences.length > 0) {
+            localSentences[localSentences.length - 1].vietnamese = cleanVi;
+            continue;
+          }
+        }
+
         let sentenceText = trimmed;
         let vietnameseText = "";
 
@@ -359,12 +368,15 @@ app.post("/api/transcript", async (req, res) => {
     }
 
     if (watchSuccess && captionTracks && captionTracks.length > 0) {
-      let selectedTrack = captionTracks.find((track) => track.languageCode === "vi");
+      // Prioritize English track for dictation, or original non-translated spoken track
+      let selectedTrack = captionTracks.find(
+        (track) => track.languageCode === "en" || track.languageCode?.startsWith("en")
+      );
       if (!selectedTrack) {
-        selectedTrack = captionTracks.find((track) => track.languageCode === "en");
+        selectedTrack = captionTracks.find((track) => track.isTranslatable === false);
       }
       if (!selectedTrack) {
-        selectedTrack = captionTracks[0];
+        selectedTrack = captionTracks.find((track) => track.languageCode !== "vi") || captionTracks[0];
       }
 
       selectedLanguage = selectedTrack.languageCode;
@@ -377,12 +389,35 @@ app.post("/api/transcript", async (req, res) => {
           const rawSegments = parseXmlTranscript(transcriptXml);
 
           if (rawSegments.length > 0) {
-            const basicSentences = mergeRawSegmentsLocally(rawSegments).map((seg, idx) => ({
-              id: idx + 1,
-              sentence: seg.sentence,
-              start: seg.start,
-              end: seg.end,
-            }));
+            // Fetch Vietnamese auto-translation track for vietnamese translation hints
+            let viSegmentsMap = new Map<number, string>();
+            try {
+              let viUrl = transcriptUrl.includes("&tlang=")
+                ? transcriptUrl.replace(/&tlang=[^&]+/, "&tlang=vi")
+                : transcriptUrl + "&tlang=vi";
+              const viRes = await fetch(viUrl);
+              if (viRes.ok) {
+                const viXml = await viRes.text();
+                const viRaw = parseXmlTranscript(viXml);
+                const viMerged = mergeRawSegmentsLocally(viRaw);
+                viMerged.forEach((v) => {
+                  viSegmentsMap.set(v.start, v.sentence);
+                });
+              }
+            } catch (viErr) {
+              console.warn("Could not fetch auto Vietnamese translation track:", viErr);
+            }
+
+            const basicSentences = mergeRawSegmentsLocally(rawSegments).map((seg, idx) => {
+              const viText = viSegmentsMap.get(seg.start);
+              return {
+                id: idx + 1,
+                sentence: seg.sentence, // Primary English sentence
+                start: seg.start,
+                end: seg.end,
+                ...(viText ? { vietnamese: viText } : {}),
+              };
+            });
 
             res.json({
               videoId,

@@ -15,14 +15,14 @@ export interface VideoDetails {
   title: string;
   author: string;
   thumbnailUrl: string;
-  language: string;
+  language?: string;
   isRestored?: boolean;
 }
 
 export interface Correction {
   word: string;
   expected: string;
-  type: "missing" | "spelling" | "incorrect";
+  type: "missing" | "spelling" | "incorrect" | "extra" | "different";
   reason?: string;
 }
 
